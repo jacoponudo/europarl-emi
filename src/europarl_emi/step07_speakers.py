@@ -39,17 +39,17 @@ FIGURE = cfg.FIGURES / "emi_by_year_speakers.png"
 MIN_PER_CELL = 100
 
 FAMILIES = {
-    "PPE": "PPE", "PPE-DE": "PPE", "EPP": "PPE",
-    "PSE": "S&D", "S&D": "S&D", "PES": "S&D",
-    "ELDR": "Liberali", "ALDE": "Liberali", "RENEW": "Liberali",
-    "V": "Verdi/ALE", "VERTS/ALE": "Verdi/ALE", "GREENS/ALE": "Verdi/ALE", "GREENS/EFA": "Verdi/ALE",
-    "GUE/NGL": "Sinistra", "GUE": "Sinistra", "THE LEFT": "Sinistra",
-    "UPE": "Conservatori", "UEN": "Conservatori", "ECR": "Conservatori",
-    "EDN": "Euroscettici", "I-EDN": "Euroscettici", "EDD": "Euroscettici", "IND/DEM": "Euroscettici",
-    "EFD": "Euroscettici", "EFDD": "Euroscettici", "ENF": "Euroscettici", "ID": "Euroscettici",
-    "ITS": "Euroscettici",
-    "NI": "Non iscritti", "TDI": "Non iscritti",
-    "ARE": "Altro",
+    "PPE": "EPP", "PPE-DE": "EPP", "EPP": "EPP",
+    "PSE": "S&D", "S&D": "S&D", "S-D": "S&D", "PES": "S&D",
+    "ELDR": "Liberals", "ALDE": "Liberals", "RENEW": "Liberals",
+    "V": "Greens/EFA", "VERTS/ALE": "Greens/EFA", "GREENS/ALE": "Greens/EFA", "GREENS/EFA": "Greens/EFA",
+    "GUE/NGL": "Left", "GUE": "Left", "LEFT": "Left", "THE LEFT": "Left",
+    "UPE": "Conservatives", "UEN": "Conservatives", "ECR": "Conservatives",
+    "EDN": "Eurosceptics", "I-EDN": "Eurosceptics", "EDD": "Eurosceptics", "IND/DEM": "Eurosceptics",
+    "EFD": "Eurosceptics", "EFDD": "Eurosceptics", "ENF": "Eurosceptics", "ID": "Eurosceptics",
+    "ITS": "Eurosceptics",
+    "NI": "Non-attached", "TDI": "Non-attached",
+    "ARE": "Other",
 }
 GROUP_PAREN = re.compile(r"\(([^()]{1,25})\)")
 
@@ -82,7 +82,7 @@ def build_sample():
     df = df[(df["role"] == "mep") & ~df["written"] & ~df["translated"]].copy()
 
     df["group"] = df["header"].map(clean_group)
-    df["family"] = df["group"].map(FAMILIES).fillna("Altro")
+    df["family"] = df["group"].map(FAMILIES).fillna("Other")
 
     countries = country_of(pd.read_csv(MEPS))
     df["mep_id"] = df["detectedmepid"].astype(str).str.replace(r"\.0$", "", regex=True)
@@ -150,8 +150,8 @@ def main():
     print(df["country"].value_counts().head(10).to_string())
     print("\nFamiglie politiche:")
     print(df["family"].value_counts().to_string())
-    print("\nSigle finite in 'Altro' (le 10 piu frequenti):")
-    print(df.loc[df["family"] == "Altro", "group"].value_counts(dropna=False).head(10).to_string())
+    print("\nSigle finite in 'Other' (le 10 piu frequenti):")
+    print(df.loc[df["family"] == "Other", "group"].value_counts(dropna=False).head(10).to_string())
 
     table = trends(df)
     table.round(3).to_csv(TABLE_TREND)

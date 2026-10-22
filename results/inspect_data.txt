@@ -1,0 +1,112 @@
+======================================================================
+1. INVENTARIO
+
+raw/corpus/all_years_combined  |  621,513 righe  |  25 colonne  |  374 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url
+   lingue: {'en': 332577, 'fr': 47869, 'it': 35316, 'es': 25886, 'de': 25473, 'pt': 19843, 'el': 13805, 'hr': 12918}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+raw/corpus/data_english_simplified  |  332,414 righe  |  27 colonne  |  188 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url, char_len, word_count
+   lingue: {'en': 332414}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+raw/corpus/dataenglishv2  |  340,771 righe  |  25 colonne  |  201 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url
+   lingue: {'en': 332577, 'EN': 8194}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+interim/dataenglishv3  |  340,606 righe  |  25 colonne  |  191 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url
+   lingue: {'en': 332414, 'EN': 8192}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+interim/train  |  42,635 righe  |  2 colonne  |  8 MB
+   colonne: text, label
+
+interim/val  |  2,445 righe  |  2 colonne  |  0 MB
+   colonne: text, label
+
+interim/filtered_nov2  |  328,678 righe  |  26 colonne  |  668 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url, predicted_label
+   lingue: {'en': 320651, 'EN': 8027}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+interim/outputv2  |  636,404 righe  |  38 colonne  |  237 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url, predicted_label, length, chunk_length, avg_evidence_score, avg_intuition_score, length_bin, evidence_mean, intuition_mean, evidence_adj, intuition_adj, evidence_z, intuition_z, evidence_minus_intuition_score
+   lingue: {'en': 618668, 'EN': 17736}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+processed/mep_database  |  5,912 righe  |  9 colonne  |  1 MB
+   colonne: mep_id, name, country, country_code, political_group, start_date, end_date, term, term_years
+
+processed/outputv2_filled  |  636,404 righe  |  39 colonne  |  244 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url, predicted_label, length, chunk_length, avg_evidence_score, avg_intuition_score, length_bin, evidence_mean, intuition_mean, evidence_adj, intuition_adj, evidence_z, intuition_z, evidence_minus_intuition_score, detectedspeaker_clean
+   lingue: {'en': 618668, 'EN': 17736}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+processed/political_groups_simplified  |  636,404 righe  |  41 colonne  |  984 MB
+   colonne: description, detectedmepid, detectedspeaker, docTitle, doctype, eventID, guid, language, link, parID, pubdate, seqID, source, speaker, speaker-title, title, wordcount, detectedNationalPoliticalGroup, detectedPoliticalGroupEU, speaker-country, TranslatedTitle, LanguageDetected, TranslatedDescription, interventionID, url, predicted_label, length, chunk_length, avg_evidence_score, avg_intuition_score, length_bin, evidence_mean, intuition_mean, evidence_adj, intuition_adj, evidence_z, intuition_z, evidence_minus_intuition_score, detectedspeaker_clean, year, PoliticalGroupSimplified
+   lingue: {'en': 618668, 'EN': 17736}
+   date: 1996-04-15 -> 2023-11-23  (non leggibili: 0)
+
+======================================================================
+2. ORDINAMENTO E BLOCCHI DA 1000 RIGHE (interim/outputv2)
+
+   righe consecutive in ordine cronologico: 100.0%
+   blocchi: 637
+   blocchi che coprono un solo anno: 95.8%
+   media EMI per blocco: da -0.0000 a 0.0000
+
+   EMI per anno:
+          mean    std  count
+pubdate                     
+1996     0.000  0.729  19044
+1997     0.000  0.718  27557
+1998    -0.001  0.743  31312
+1999    -0.001  0.730  24725
+2000    -0.000  0.750  30991
+2001     0.000  0.748  29712
+2002     0.002  0.748  27359
+2003     0.001  0.759  28798
+2004    -0.000  0.741  20583
+2005     0.001  0.756  28615
+2006     0.001  0.755  29064
+2007    -0.004  0.758  29378
+2008     0.002  0.748  34612
+2009     0.002  0.738  26708
+2010    -0.000  0.721  38149
+2011     0.001  0.746  49751
+2012    -0.003  0.721  42322
+2013     0.001  0.755  12923
+2014     0.002  0.749  10085
+2015    -0.000  0.714  19691
+2016     0.001  0.736  23569
+2017    -0.001  0.784   8457
+2018     0.003  0.763   8679
+2019    -0.008  0.761   7150
+2020     0.003  0.737   4791
+2021     0.000  0.775   7211
+2022     0.001  0.745   8052
+2023     0.000  0.749   7116
+
+======================================================================
+3. METADATI PARLAMENTARI
+
+   database MEP: 5,912 righe, 3,688 nomi unici
+   colonne: ['mep_id', 'name', 'country', 'country_code', 'political_group', 'start_date', 'end_date', 'term', 'term_years']
+   start_date compilata: 0.0%
+   nomi con piu di un gruppo politico: 790
+   detectedspeaker: mancante nel 22.5% delle righe
+   speaker-country: mancante nel 3.5% delle righe
+   detectedPoliticalGroupEU: mancante nel 4.1% delle righe
+
+======================================================================
+4. LESSICI
+
+   evidence: 49 voci, colonne ['evidence_keywords']
+   accurate; analyse; analysis; correct; correction; data; dossier; education; evidence; evident; exact; examination; examine; expert; explore; fact; find; findings; information; inquiry; intelligence; investigate; investigation; knowledge; lab; learn; logic; logical; method; pinpoint; precise; procedure; process; proof; question; read; reason; research; science; scientific; search; show; statistics; study; trial; real; true; truth; truthful
+
+   intuition: 35 voci, colonne ['intuition_keywords']
+   belief; believe; bogus; common sense; distrust; doubt; fake; fake news; feeling; genuine; guess; gut; instinct; intuition; lie; mistrust; opinion; perspective; phony; point of view; propaganda; sense; suspicion; view; viewpoint; wrong; advice; deceive; deception; dishonest; dishonesty; mislead; mistaken; suggest; suggestion
+
