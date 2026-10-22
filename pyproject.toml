@@ -1,0 +1,29 @@
+[project]
+name = "europarl-emi"
+version = "0.1.0"
+description = "Evidence-minus-intuition (EMI) scoring of English-language European Parliament interventions"
+readme = "README.md"
+authors = [{ name = "Jacopo Nudo", email = "jacopo.nudo@uniroma1.it" }]
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.4",
+    "pandas>=3.0.6",
+    "pyarrow>=26.0.0",
+    "rapidfuzz>=3.14.6",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
+    "sentence-transformers>=6.2.0",
+    "tqdm>=4.70.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]

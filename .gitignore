@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+.DS_Store
+
+# Dati e modelli: fuori da git (pesanti, corpus non pubblico)
+data/**
+!data/**/
+!**/.gitkeep
+!data/raw/lexicons/*.csv
+models/**
+!models/.gitkeep
+results/figures/legacy/*
+!results/figures/legacy/.gitkeep
