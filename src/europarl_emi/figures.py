@@ -26,9 +26,12 @@ Supplementary
 
 import argparse
 
+import sys
+
 import matplotlib
 
-matplotlib.use("Agg")
+if "ipykernel" not in sys.modules:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -47,10 +50,18 @@ OUT = cfg.FIGURES / "paper"
 MM = 1 / 25.4
 SINGLE, ONE_HALF, DOUBLE = 89 * MM, 120 * MM, 183 * MM
 
-MINT, SAGE, GREY, OCHRE, PEACH = "#e2efde", "#afd0bf", "#808f87", "#9b7e46", "#f4b266"
-INK, MUTED, DARK = "#1a1a1a", "#5a5a5a", "#3a3a3a"
+# Paper palette. Names are kept for compatibility with existing code and notebooks;
+# each colour has one role in every figure.
+OCHRE = "#b3001b"   # primary series: lines and points (red)
+PEACH = "#baacbd"   # band of the primary series (mauve)
+GREY = "#646e68"    # secondary series: lines and edges (dark grey-green)
+SAGE = "#a3bba8"    # secondary fills (sage)
+MINT = "#c7efcf"    # lightest fill (mint)
+WINE, SLATE, MIST, ASH, PLUM = "#8c3742", "#7f8780", "#c1cec6", "#8f8d93", "#371e30"
+INK, MUTED, DARK = "#1a1a1a", "#5a5a5a", PLUM  # DARK: third line series
 
-# Only OCHRE and GREY are dark enough for lines on white; light colours are fills only.
+# Only OCHRE (red), GREY (dark grey-green) and DARK (plum) are dark enough for lines on white;
+# the light colours are fills only, and SAGE and PEACH are never placed next to each other.
 # Series are also told apart by line style and marker, and labelled directly.
 LINES = [
     {"color": OCHRE, "ls": "-", "marker": "o"},
@@ -60,6 +71,7 @@ LINES = [
 FAMILY_ORDER = ["Left", "Greens/EFA", "S&D", "Liberals", "EPP", "Conservatives", "Eurosceptics", "Non-attached"]
 TERMS_MAIN = ["4th", "5th", "6th", "7th", "8th"]
 TERM_BOUNDARIES = [1999.5, 2004.5, 2009.5, 2014.5, 2019.5]
+LOW_COVERAGE = "#e6e6e6"  # bands and points after 2019: white-grey, whatever the series
 
 
 def set_style():
@@ -98,14 +110,29 @@ def zero_line(ax, axis="h"):
     (ax.axhline if axis == "h" else ax.axvline)(0, color=MUTED, linewidth=0.4, zorder=0)
 
 
+BOOT_B = 2000  # bootstrap replicates for every confidence interval in the figures
+
+
+def boot_ci(values, b=BOOT_B, seed=None, chunk=200):
+    """Mean and 95% percentile-bootstrap interval of the mean (speeches resampled with replacement)."""
+    v = np.asarray(values, dtype=float)
+    v = v[~np.isnan(v)]
+    rng = np.random.default_rng(cfg.SEED if seed is None else seed)
+    means = np.concatenate([v[rng.integers(0, len(v), size=(min(chunk, b - i), len(v)))].mean(axis=1)
+                            for i in range(0, b, chunk)])
+    lo, hi = np.percentile(means, [2.5, 97.5])
+    return v.mean(), lo, hi
+
+
 def yearly(df, col, min_n=1):
-    g = df.groupby("year")[col].agg(["mean", "std", "count"])
-    g["se"] = g["std"] / np.sqrt(g["count"])
-    g["lo"] = g["mean"] - 1.96 * g["se"]
-    g["hi"] = g["mean"] + 1.96 * g["se"]
-    g = g[g["count"] >= min_n]
-    g.index = g.index.astype(int)
-    return g
+    """Yearly mean with 95% percentile-bootstrap interval."""
+    rows = []
+    for year, g in df.groupby("year"):
+        v = g[col].dropna().to_numpy()
+        if len(v) >= min_n:
+            m, lo, hi = boot_ci(v, seed=cfg.SEED + int(year))
+            rows.append((int(year), m, lo, hi, len(v)))
+    return pd.DataFrame(rows, columns=["year", "mean", "lo", "hi", "count"]).set_index("year")
 
 
 def plot_series(ax, s, style, label, band=True):
@@ -152,7 +179,7 @@ def fig1():
     cat[mep & ~df["written"] & ~df["translated"]] = "MEP, oral, original English (main sample)"
     order = ["MEP, oral, original English (main sample)", "MEP, oral, translated", "MEP, written statement",
              "Chair, Commission or Council", "Unrecognised header"]
-    fills = [OCHRE, PEACH, SAGE, GREY, MINT]
+    fills = [OCHRE, SAGE, GREY, PEACH, MINT]
     counts = pd.crosstab(df["year"].astype(int), cat).reindex(columns=order, fill_value=0)
     shares = counts.div(counts.sum(axis=1), axis=0) * 100
 
@@ -176,26 +203,57 @@ def fig1():
 
 
 def fig2():
-    """EMI by year in the main sample; years after 2019 shown as low coverage."""
-    s = yearly(load_main(period=None), "emi")
-    core, late = s[s.index <= 2019], s[s.index >= 2019]
+    """EMI by year: speeches delivered in English and all oral MEP speeches including translations.
+    Same marker for both series; point area proportional to speeches per year;
+    years after 2019 (low coverage) drawn with white markers and white-grey bands."""
+    original = load_main(period=None)[["year", "emi"]]
+    oral = pd.read_parquet(ANNOTATED, columns=["year", "emi", "role", "written"])
+    oral = oral[(oral["role"] == "mep") & ~oral["written"]]
+    # (label, data, line colour, marker fill, band colour, band alpha, line style); drawn in this order
+    series = [
+        ("Including translations", yearly(oral, "emi"), GREY, SAGE, SAGE, 0.45, "--"),
+        ("Delivered in English", yearly(original, "emi"), OCHRE, OCHRE, PEACH, 0.5, "-"),
+    ]
+    n_max = max(s_["count"].max() for _, s_, *_ in series)
 
-    fig, ax = plt.subplots(figsize=(ONE_HALF, 65 * MM))
+    def area(n):
+        return 3 + 60 * np.asarray(n) / n_max
+
+    fig, ax = plt.subplots(figsize=(ONE_HALF, 72 * MM))
+    last = max(s_.index.max() for _, s_, *_ in series)
     zero_line(ax)
     for b in TERM_BOUNDARIES:
         ax.axvline(b, color="#d0d0d0", linewidth=0.4, zorder=0)
-    ax.fill_between(core.index, core["lo"], core["hi"], color=PEACH, alpha=0.55, linewidth=0)
-    ax.plot(core.index, core["mean"], color=OCHRE, marker="o", linewidth=1)
-    ax.fill_between(late.index, late["lo"], late["hi"], color=GREY, alpha=0.18, linewidth=0)
-    ax.plot(late.index, late["mean"], color=GREY, ls="--", marker="o", markerfacecolor="white", linewidth=0.8)
+    handles = []
+    for z, (label, s_, line, fill, band, alpha, ls) in enumerate(series):
+        core, late = s_[s_.index <= 2019], s_[s_.index > 2019]
+        edge = s_[s_.index >= 2019]  # low-coverage band starts at 2019 so the two bands join
+        ax.fill_between(core.index, core["lo"], core["hi"], color=band, alpha=alpha, linewidth=0, zorder=1 + z)
+        ax.fill_between(edge.index, edge["lo"], edge["hi"], color=LOW_COVERAGE, alpha=0.8, linewidth=0, zorder=1 + z)
+        ax.plot(s_.index, s_["mean"], color=line, ls=ls, linewidth=1, zorder=3 + z)
+        ax.scatter(core.index, core["mean"], s=area(core["count"]), marker="o", facecolor=fill,
+                   edgecolor=line, linewidth=0.6, zorder=5 + z)
+        ax.scatter(late.index, late["mean"], s=area(late["count"]), marker="o", facecolor="white",
+                   edgecolor=line, linewidth=0.6, zorder=5 + z)
+        handles.append(plt.Line2D([], [], color=line, ls=ls, marker="o", markersize=3.5,
+                                  markerfacecolor=fill, markeredgecolor=line, label=label))
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
     ymin, ymax = ax.get_ylim()
-    for x, label in zip([1997.75, 2002, 2007, 2012, 2017, 2021.5], ["4th", "5th", "6th", "7th", "8th", "9th"]):
+    for x, label in zip([1997.75, 2002, 2007, 2012, 2017], ["4th", "5th", "6th", "7th", "8th"]):
         ax.text(x, 1.01, f"{label} term", transform=ax.get_xaxis_transform(), ha="center", fontsize=5.5, color=MUTED)
-    ax.text(2004.7, ymin + 0.03 * (ymax - ymin), "2004 enlargement", fontsize=5.5, color=MUTED)
-    if len(late) > 1:
-        ax.text(late.index.to_numpy().mean(), late["hi"].max() + 0.02 * (ymax - ymin), "Low coverage",
-                fontsize=5.5, color=MUTED, ha="center", va="bottom")
+    ax.text((2019.5 + last) / 2, 1.01, "Low coverage", transform=ax.get_xaxis_transform(),
+            ha="center", fontsize=5.5, color=MUTED)
+    ax.axvline(2012.5, color=INK, linewidth=0.5, ls=":", zorder=1)
+    ax.text(2012.7, ymin + 0.03 * (ymax - ymin), "End of\ntranslations", fontsize=5.5, color=MUTED, va="bottom")
+
+    first = ax.legend(handles=handles[::-1], loc="upper right", bbox_to_anchor=(1, 0.93), fontsize=6)
+    ax.add_artist(first)
+    ref = [n for n in (100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000) if n <= n_max]
+    ref = sorted({ref[0], ref[len(ref) // 2], ref[-1]})
+    sizes = [ax.scatter([], [], s=area(n), color=MUTED, linewidth=0, label=f"{n:,}") for n in ref]
+    ax.legend(handles=sizes, title="Speeches per year", loc="lower left", fontsize=5.5, title_fontsize=5.5,
+              ncol=len(sizes), columnspacing=1.0, handletextpad=0.3, borderpad=0.6)
     ax.set_ylabel("EMI (evidence minus intuition)")
     ax.set_xlabel("Year")
     save(fig, "fig2")
@@ -237,16 +295,20 @@ def fig4():
     """EMI by political family and parliamentary term (4th-8th), shared y-axis."""
     df = load_main()
     df = df[df["term"].isin(TERMS_MAIN)]
-    g = df.groupby(["family", "term"], observed=True)["emi"].agg(["mean", "std", "count"]).reset_index()
-    g["se"] = g["std"] / np.sqrt(g["count"])
-    g = g[g["count"] >= 50]
+    rows = []
+    for (family, term), grp in df.groupby(["family", "term"], observed=True):
+        if len(grp) >= 50:
+            m, lo, hi = boot_ci(grp["emi"].to_numpy())
+            rows.append((family, term, m, lo, hi))
+    g = pd.DataFrame(rows, columns=["family", "term", "mean", "lo", "hi"])
 
     fig, axes = plt.subplots(2, 4, figsize=(DOUBLE, 85 * MM), sharex=True, sharey=True)
     for ax, family in zip(axes.flat, FAMILY_ORDER):
         sub = g[g["family"] == family].set_index("term").reindex(TERMS_MAIN)
         x = np.arange(len(TERMS_MAIN))
         zero_line(ax)
-        ax.errorbar(x, sub["mean"], yerr=1.96 * sub["se"], color=OCHRE, marker="o", markersize=3,
+        ax.errorbar(x, sub["mean"], yerr=[sub["mean"] - sub["lo"], sub["hi"] - sub["mean"]], color=OCHRE,
+                    marker="o", markersize=3,
                     linewidth=0.9, elinewidth=0.6, capsize=0)
         ax.set_title(family, loc="left", fontsize=7)
         ax.set_xticks(x, TERMS_MAIN)
@@ -278,34 +340,52 @@ def fig5():
 # ---------------------------------------------------------------- supplementary
 
 def figS1():
-    """Processing pipeline with the number of texts at each stage."""
+    """Processing pipeline with the number of texts at each stage, and why texts leave the main sample."""
     raw = len(pd.read_csv(cfg.RAW_CORPUS / "all_years_combined.csv.gzip", compression="gzip", usecols=["language"]))
+    main_all = nrows(cfg.PROCESSED / "07_speech_main_sample.parquet")
+    main_period = len(load_main())
     stages = [
-        ("Raw corpus, all languages", raw),
-        ("English-language speeches", nrows(cfg.INTERIM / "01_speeches_en.parquet")),
-        ("Very short texts removed", nrows(cfg.INTERIM / "02_speeches_clean.parquet")),
-        ("Procedural texts removed", nrows(cfg.INTERIM / "03_speeches_substantive.parquet")),
-        ("Scored speeches", nrows(cfg.PROCESSED / "05_speech_emi.parquet")),
-        ("Main sample: oral speeches by MEPs,\noriginally delivered in English", nrows(cfg.PROCESSED / "07_speech_main_sample.parquet")),
+        ("Raw corpus, all languages", raw, None),
+        ("English-language speeches", nrows(cfg.INTERIM / "01_speeches_en.parquet"), None),
+        ("Very short texts removed", nrows(cfg.INTERIM / "02_speeches_clean.parquet"), None),
+        ("Procedural texts removed", nrows(cfg.INTERIM / "03_speeches_substantive.parquet"), None),
+        ("Scored speeches", nrows(cfg.PROCESSED / "05_speech_emi.parquet"), None),
+        ("Main sample, 1996–2019: oral speeches\nby MEPs, delivered in English", main_period,
+         f"({main_all:,} including 2020–2023)"),
     ]
-    notes = ["language = English", "≥ 3 words and ≥ 16 characters", "NB-LR classifier, texts < 400 characters",
-             "> 10 words; ≤ 150-word chunks; MiniLM similarity", "speech header: role, original language, written"]
 
-    fig, ax = plt.subplots(figsize=(ONE_HALF, 110 * MM))
+    ann = pd.read_parquet(ANNOTATED, columns=["role", "written", "translated", "header_found"]).reset_index(drop=True)
+    unrecognised = ~ann["header_found"] | (ann["role"] == "unknown")
+    non_mep = ~unrecognised & ann["role"].isin(["chair", "commission", "council"])
+    mep = ~unrecognised & (ann["role"] == "mep")
+    excluded = [
+        ("translated into English", int((mep & ~ann["written"] & ann["translated"]).sum())),
+        ("written statements", int((mep & ann["written"]).sum())),
+        ("chair, Commission or Council", int(non_mep.sum())),
+        ("header not recognised", int(unrecognised.sum())),
+        ("speeches after 2019", main_all - main_period),
+    ]
+    last_note = "Speech header parsed. Excluded:\n" + "\n".join(f"{label}: {n:,}" for label, n in excluded)
+    notes = ["language = English", "≥ 3 words and ≥ 16 characters", "NB-LR classifier, texts < 400 characters",
+             "> 10 words; ≤ 150-word chunks; MiniLM similarity", last_note]
+
+    fig, ax = plt.subplots(figsize=(ONE_HALF, 125 * MM))
     ax.set_xlim(0, 1)
-    ax.set_ylim(0, len(stages))
+    ax.set_ylim(-0.2, len(stages))
     ax.axis("off")
-    for i, (label, n) in enumerate(stages):
+    for i, (label, n, extra) in enumerate(stages):
         yc = len(stages) - i - 0.5
         fill = SAGE if i == len(stages) - 1 else MINT
         ax.add_patch(FancyBboxPatch((0.03, yc - 0.33), 0.5, 0.66, boxstyle="round,pad=0.01,rounding_size=0.03",
                                     facecolor=fill, edgecolor=GREY, linewidth=0.5))
         ax.text(0.28, yc + (0.14 if "\n" in label else 0.1), label, ha="center", va="center", fontsize=6.5, linespacing=1.1)
         ax.text(0.28, yc - 0.2, f"n = {n:,}", ha="center", va="center", fontsize=6.5, fontweight="bold")
+        if extra:
+            ax.text(0.28, yc - 0.47, extra, ha="center", va="center", fontsize=5.5, color=MUTED)
         if i < len(notes):
             ax.annotate("", xy=(0.28, yc - 0.67), xytext=(0.28, yc - 0.33),
                         arrowprops={"arrowstyle": "-|>", "color": GREY, "linewidth": 0.6})
-            ax.text(0.56, yc - 0.5, notes[i], va="center", fontsize=6, color=MUTED, style="italic")
+            ax.text(0.56, yc - 0.5, notes[i], va="center", fontsize=6, color=MUTED, style="italic", linespacing=1.25)
     save(fig, "figS1")
 
 
@@ -379,7 +459,60 @@ def tableS3():
            for name in ("evidence", "intuition")}
     width = max(len(v) for v in lex.values())
     pd.DataFrame({k: v + [""] * (width - len(v)) for k, v in lex.items()}).to_csv(tables / "S3_lexicons.csv", index=False)
-    print("  saved results/tables/S3_examples.csv and S3_lexicons.csv")
+
+    write_latex_tables(out, lex, tables)
+    print("  saved results/tables/S3_examples.csv/.tex and S3_lexicons.csv/.tex")
+
+
+LATEX_SPECIAL = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_",
+                 "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
+SAFE_EXTRA = set("‘’“”–—…€șțȘȚ")
+
+
+def latex_escape(text):
+    """Escape LaTeX special characters and drop characters that pdflatex (T1) cannot typeset."""
+    import unicodedata
+
+    out = []
+    for ch in str(text):
+        if ch in LATEX_SPECIAL:
+            out.append(LATEX_SPECIAL[ch])
+        elif ch in "\u00a0\u2009\u202f":
+            out.append(" ")
+        elif ch in "\u2010\u2011\u2212":
+            out.append("-")
+        elif ch == "…":
+            out.append(r"\ldots{}")
+        elif ord(ch) < 0x180 or ch in SAFE_EXTRA:  # Latin-1 + Latin Extended-A (ł, ś, č, ő ...)
+            out.append(ch)
+        else:
+            out.append(unicodedata.normalize("NFKD", ch).encode("ascii", "ignore").decode())
+    return "".join(out)
+
+
+def write_latex_tables(examples, lexicons, folder, per_end=5, chars=200):
+    """LaTeX versions of Supplementary Table S3, to \\input{} in the paper (compact: fits one page)."""
+    lines = [r"\footnotesize", r"\setlength{\tabcolsep}{4pt}",
+             r"\begin{tabular}{@{}r r l l p{8.8cm}@{}}", r"\toprule",
+             r"EMI & Year & Family & Country & Excerpt \\", r"\midrule"]
+    for end, group in examples.groupby("end", sort=False):
+        lines.append(rf"\multicolumn{{5}}{{@{{}}l}}{{\textit{{{end}}}}} \\")
+        for _, r in group.head(per_end).iterrows():
+            country = "--" if pd.isna(r["country"]) else str(r["country"]).title()
+            family = "--" if pd.isna(r["family"]) else r["family"]
+            excerpt = str(r["excerpt"]).rstrip("…")[:chars].rsplit(" ", 1)[0] + "…"
+            lines.append(f"{r['emi']:.2f} & {int(r['year'])} & {latex_escape(family)} & "
+                         f"{latex_escape(country)} & {latex_escape(excerpt)} \\\\[1pt]")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    (folder / "S3_examples.tex").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    lex_lines = [r"\footnotesize", r"\begin{tabular}{@{}p{7.6cm} p{7.6cm}@{}}", r"\toprule",
+                 rf"Evidence ({len(lexicons['evidence'])} terms) & Intuition ({len(lexicons['intuition'])} terms) \\",
+                 r"\midrule",
+                 ", ".join(map(latex_escape, lexicons["evidence"])) + " & "
+                 + ", ".join(map(latex_escape, lexicons["intuition"])) + r" \\",
+                 r"\bottomrule", r"\end{tabular}"]
+    (folder / "S3_lexicons.tex").write_text("\n".join(lex_lines) + "\n", encoding="utf-8")
 
 
 def figS4():
@@ -458,7 +591,7 @@ def figS8():
     counts = pd.crosstab(df["year"].astype(int), df["country_group"]).reindex(columns=order, fill_value=0)
     fig, ax = plt.subplots(figsize=(ONE_HALF, 62 * MM))
     bottom = np.zeros(len(counts))
-    for col, color in zip(order, [OCHRE, PEACH, SAGE, MINT]):
+    for col, color in zip(order, [OCHRE, PEACH, GREY, MINT]):
         ax.bar(counts.index, counts[col], bottom=bottom, color=color, width=0.8,
                edgecolor="white", linewidth=0.3, label=col)
         bottom += counts[col].to_numpy()
