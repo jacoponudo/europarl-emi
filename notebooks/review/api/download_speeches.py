@@ -22,6 +22,8 @@ import urllib.request
 from datetime import date, timedelta
 from pathlib import Path
 
+from tqdm import tqdm
+
 ROOT = Path(__file__).resolve().parents[3]
 OUT = ROOT / "data" / "raw" / "api" / "speeches"
 BASE = "https://data.europarl.europa.eu/api/v2/speeches"
@@ -44,10 +46,10 @@ def get(params, tries=10):
             if e.code in (204, 404):
                 return {"data": []}
             wait = 300 if e.code == 429 else 15 * (k + 1)
-            print(f"  HTTP {e.code}, retry in {wait}s", flush=True)
+            tqdm.write(f"  HTTP {e.code}, retry in {wait}s")
         except Exception as e:
             wait = 15 * (k + 1)
-            print(f"  {type(e).__name__}: {e}, retry in {wait}s", flush=True)
+            tqdm.write(f"  {type(e).__name__}: {e}, retry in {wait}s")
         time.sleep(wait)
     raise RuntimeError(f"failed after {tries} tries: {url}")
 
@@ -117,35 +119,43 @@ def main():
     ap.add_argument("--end", default=date.today().isoformat(), help="YYYY-MM-DD (default: today)")
     args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    day, end = date.fromisoformat(args.start), date.fromisoformat(args.end)
-    print(f"Downloading {day} to {end} into {OUT}", flush=True)
-    while day <= end:
+    start, end = date.fromisoformat(args.start), date.fromisoformat(args.end)
+    days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+    days = [d for d in days if d.weekday() < 5]
+    print(f"Downloading {start} to {end} ({len(days):,} weekdays) into {OUT}", flush=True)
+    n_speeches = n_new_days = 0
+    bar = tqdm(days, desc="Days", unit="day", dynamic_ncols=True)
+    for day in bar:
+        bar.set_postfix_str(f"{day} | downloaded this run: {n_speeches:,} speeches")
         path = OUT / f"{day}.jsonl"
-        if day.weekday() < 5 and not path.exists():
-            rows, offset, other_dates = [], 0, 0
-            while True:
-                d = get({"sitting-date": day.isoformat(), "format": "application/ld+json", "language-filter": "mul",
-                         "include-output": "xml_fragment", "offset": offset, "limit": PAGE})
-                time.sleep(PAUSE)
-                recs = d.get("data", [])
-                for r in recs:
-                    if r.get("activity_date") == day.isoformat():
-                        rows.append(slim(r))
-                    else:
-                        other_dates += 1
-                if len(recs) < PAGE:
-                    break
-                offset += PAGE
-            tmp = path.with_suffix(".tmp")
-            tmp.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in rows), encoding="utf-8")
-            tmp.rename(path)
-            if rows or other_dates:
-                en = sum(x["original_language"] == "en" for x in rows)
-                mt = sum(bool(x["text_en_mt"]) for x in rows)
-                print(f"{day}  {len(rows):4d} speeches, {en:4d} in English, {mt:4d} with English MT"
-                      + (f"  (WARNING: {other_dates} records from other dates)" if other_dates else ""), flush=True)
-        day += timedelta(days=1)
-    print("done", flush=True)
+        if path.exists():
+            continue
+        rows, offset, other_dates = [], 0, 0
+        while True:
+            d = get({"sitting-date": day.isoformat(), "format": "application/ld+json", "language-filter": "mul",
+                     "include-output": "xml_fragment", "offset": offset, "limit": PAGE})
+            time.sleep(PAUSE)
+            recs = d.get("data", [])
+            for r in recs:
+                if r.get("activity_date") == day.isoformat():
+                    rows.append(slim(r))
+                else:
+                    other_dates += 1
+            if len(recs) < PAGE:
+                break
+            offset += PAGE
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in rows), encoding="utf-8")
+        tmp.rename(path)
+        n_new_days += 1
+        n_speeches += len(rows)
+        if rows or other_dates:
+            en = sum(x["original_language"] == "en" for x in rows)
+            mt = sum(bool(x["text_en_mt"]) for x in rows)
+            tqdm.write(f"{day}  {len(rows):4d} speeches, {en:4d} in English, {mt:4d} with English MT"
+                       + (f"  (WARNING: {other_dates} records from other dates)" if other_dates else ""))
+    bar.close()
+    print(f"done: {n_new_days:,} new days, {n_speeches:,} speeches", flush=True)
 
 
 if __name__ == "__main__":

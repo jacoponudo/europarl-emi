@@ -18,3 +18,15 @@ models/**
 results/figures/legacy/*
 !results/figures/legacy/.gitkeep
 paper/
+
+# Output: si rigenerano con la pipeline o con gli script di review, non vanno in git
+results/**
+!results/**/
+!**/.gitkeep
+notebooks/**/*.csv
+notebooks/**/*.pdf
+notebooks/**/*.png
+notebooks/**/*.tex
+notebooks/**/*.parquet
+notebooks/review/*.ipynb
+*.log
