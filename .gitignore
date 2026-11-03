@@ -17,3 +17,4 @@ models/**
 !models/.gitkeep
 results/figures/legacy/*
 !results/figures/legacy/.gitkeep
+paper/
