@@ -3,6 +3,7 @@
 New layout
   data/raw/inherited/   corpus/, meps/ (membership + mep_database_1994_present.csv with the MEP ids),
                         lexicons/, legacy_colab/ (outputs of the original Colab code, not regenerable)
+  (data/review/etranslation, translation checks, goes to results/review/etranslation)
   data/raw/api/         untouched
   data/translation/     unified.parquet, etranslation.sqlite (+ etranslation_export.parquet if present)
   data/scores/<model>_<window>_<date>/   speech_emi.parquet (uid, emi, ...) + meta.json, one folder per methodology:
@@ -15,6 +16,7 @@ Ids: uid as in unified ("corpus:<guid>" or "api:<speech_id>"); old files keyed b
 
     uv run python scripts/reorganize_data.py            # dry run: prints the plan, changes nothing
     uv run python scripts/reorganize_data.py --apply    # does it
+    --drop v3_mpnet_only                                # also delete these variant folders (incomplete runs)
 """
 
 from __future__ import annotations
@@ -134,9 +136,11 @@ def to_speech_emi(info: dict) -> pd.DataFrame:
 
 # ---------------------------------------------------------------- plan
 
-def build_plan() -> Plan:
+def build_plan(drop: set[str]) -> Plan:
     pl = Plan()
     inh = D / "raw" / "inherited"
+    for f in ("data_english_simplified.csv.gzip", "dataenglishv2.csv.gzip"):  # English subsets made by the Colab code
+        pl.move(D / "raw" / "corpus" / f, inh / "legacy_colab" / f)
     pl.move_children(D / "raw" / "corpus", inh / "corpus")
     pl.move_children(D / "raw" / "meps", inh / "meps")
     pl.move(D / "processed" / "mep_database_1994_present.csv", inh / "meps" / "mep_database_1994_present.csv")
@@ -148,6 +152,7 @@ def build_plan() -> Plan:
 
     pl.move_children(D / "archive", R / "archive")
     pl.move_children(D / "review" / "sensitivity" / "logs", R / "logs" / "sensitivity")
+    pl.move_children(D / "review" / "etranslation", R / "review" / "etranslation")
 
     # translation
     uni = D / "raw" / "unified"
@@ -183,13 +188,16 @@ def build_plan() -> Plan:
     sens = D / "review" / "sensitivity"
     if sens.is_dir():
         # _smoke_*: test runs on small samples, not methodologies -> deleted
-        for v in sorted(p for p in sens.iterdir() if p.is_dir() and p.name != "logs" and not p.name.startswith("_smoke")):
+        for v in sorted(p for p in sens.iterdir() if p.is_dir() and p.name != "logs" and not p.name.startswith("_smoke")
+                        and p.name not in drop):  # --drop: incomplete runs, deleted
             name, what = VARIANTS.get(v.name, (re.sub(r"^v\d+b?_", "", v.name), "see the variant code (git history)"))
             info = find_scores(v)
             dst = D / "scores" / f"{name}_{day(v)}"
             if info:
                 meta = {"source": rel(info["file"]), "variant": v.name, "differs_from_baseline": what,
                         "level_in_source": info["level"]}
+                if (v / "settings.json").exists():
+                    meta["settings"] = json.loads((v / "settings.json").read_text())
                 pl.extracts.append((v, dst, {"info": info, "meta": meta}))
                 pl.handled.add(v)
             else:  # unknown format: keep the files as they are
@@ -242,9 +250,10 @@ def checkpoint(db: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--apply", action="store_true", help="do it (without: dry run)")
+    ap.add_argument("--drop", nargs="*", default=[], help="sensitivity variants to delete (incomplete runs)")
     args = ap.parse_args()
 
-    pl = build_plan()
+    pl = build_plan(set(args.drop))
     dels = deletions(pl)
 
     print("MOVE")
