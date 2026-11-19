@@ -4,7 +4,7 @@ Non modifica nulla: legge i file e scrive solo il rapporto in data/review/invent
 Gira uguale sul Mac e sul server; confrontando i due rapporti si vede cosa va copiato tra le macchine.
 
     uv run python notebooks/review/inventory.py            # completo (legge anche il corpus grezzo, ~1-2 min)
-    uv run python notebooks/review/inventory.py --fast     # salta la lettura del corpus e dei testi API
+    uv run python notebooks/review/inventory.py --fast     # salta corpus, testi API e copertura delle traduzioni
 
 Sezioni: 0 macchina e git | 1 file della pipeline | 2 varianti di sensibilita | 3 download API
          4 confronto corpus-API e dataset unificato | 5 eTranslation | 6 riepilogo delle cose da fare
@@ -211,7 +211,8 @@ def section_sensitivity():
             state = f"finita: {n:,} discorsi, {mtime(s)}"
             if sample not in (None, 1, 1.0):
                 state += f"  (CAMPIONE {sample})"
-                todo(f"sensibilita {name}: calcolata solo su un campione ({sample})")
+                if not name.startswith("_smoke"):
+                        todo(f"sensibilita {name}: calcolata solo su un campione ({sample})")
         else:
             state = f"NON FINITA: {parts} parti di punteggi, manca speech_emi.parquet"
             todo(f"sensibilita {name}: non finita ({parts} parti): rilanciare lo stesso comando")
@@ -323,7 +324,7 @@ def section_api(fast):
         todo(f"API: {bad} righe JSON illeggibili")
     if tot["senza MT inglese"]:
         todo(f"API: {tot['senza MT inglese']:,} interventi non inglesi senza traduzione inglese dell'API "
-             f"({tot['orali SPEAKER senza MT']:,} orali): candidati per eTranslation")
+             f"({tot['orali SPEAKER senza MT']:,} orali): vedi la sezione 5 per quanti sono gia tradotti con eTranslation")
     return tot
 
 
@@ -333,7 +334,16 @@ def section_unified():
     title("4. CONFRONTO CORPUS-API E DATASET UNIFICATO")
     show_file("coppie corpus-API", DATA / "review" / "overlap" / "pairs.parquet", needed_for="build_unified.py")
     show_file("tabella di raccordo", DATA / "review" / "overlap" / "crosswalk_corpus_api.csv")
-    ok = show_file("dataset unificato", DATA / "raw" / "unified" / "unified.parquet")
+    uni = DATA / "raw" / "unified" / "unified.parquet"
+    ok = show_file("dataset unificato", uni)
+    api = sorted((DATA / "raw" / "api" / "speeches").glob("*.jsonl"))
+    if ok and api:
+        newer = [f for f in api if f.stat().st_mtime > uni.stat().st_mtime and f.stat().st_size > 0]
+        if newer:
+            out(f"  ATTENZIONE: {len(newer)} giorni API con interventi scaricati dopo il dataset unificato "
+                f"({newer[0].stem}..{newer[-1].stem})")
+            todo(f"dataset unificato: ricostruirlo (overlap_corpus_api.py, build_unified.py) per includere "
+                 f"{len(newer)} giorni API nuovi")
     ms = DATA / "raw" / "unified" / "main_series_by_year.csv"
     if ok and ms.exists():
         out("  serie principale per anno e fonte (main_series_by_year.csv):")
@@ -367,69 +377,73 @@ def corpus_non_english():
 
 def section_etranslation(fast):
     title("5. ETRANSLATION (data/interim/etranslation/)")
-    code = (ROOT / "src" / "europarl_emi" / "etranslation" / "translate.py")
-    if code.exists():
-        src = code.read_text()
-        if "webgate.ec.europa.eu" in src:
-            out("  ATTENZIONE: translate.py usa ancora l'API v1 (webgate, Digest), dismessa il 31-10-2026")
-            todo("eTranslation: aggiornare translate.py all'API v2 (language-tools.ec.europa.eu, Basic auth)")
-        elif "language-tools.ec.europa.eu/etranslation/api" in src:
-            out("  translate.py usa l'API v2")
     D = DATA / "interim" / "etranslation"
-    db = D / "segments.sqlite"
-    seg_by_year = Counter()
+    old = D / "segments.sqlite"
+    if old.exists():
+        out(f"  segments.sqlite (vecchio translate.py, API v1, superato): {size(old.stat().st_size)}, {mtime(old)}")
+    db = D / "unified.sqlite"
     if not db.exists():
-        out("  segments.sqlite: MANCA (prepare non fatto qui)")
-        todo("eTranslation: segments.sqlite manca su questa macchina")
-    else:
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=30)
-        q = lambda s: con.execute(s).fetchall()  # noqa: E731
-        n_seg, n_txt, n_chr = q("SELECT COUNT(*), COUNT(DISTINCT guid), SUM(LENGTH(source)) FROM segments")[0]
-        out(f"  segments.sqlite: {size(db.stat().st_size)}, {mtime(db)}")
-        out(f"  testi: {n_txt:,}   segmenti: {n_seg:,}   caratteri: {n_chr or 0:,}")
-        st = dict(q("SELECT status, COUNT(*) FROM segments GROUP BY status"))
-        out(f"  segmenti per stato: {st}")
-        yrs = q("SELECT year, COUNT(DISTINCT guid), SUM(status='done'), COUNT(*), SUM(LENGTH(source)) "
-                "FROM segments GROUP BY year ORDER BY year")
-        out(f"  {'anno':6}{'testi':>10}{'segm. fatti':>14}{'segmenti':>11}{'caratteri':>15}")
-        for y, t, dn, n, ch in yrs:
-            seg_by_year[y] = t
-            out(f"  {y:<6}{t:>10,}{dn or 0:>14,}{n:>11,}{ch or 0:>15,}")
-        langs = q("SELECT lang, COUNT(DISTINCT guid) FROM segments GROUP BY lang ORDER BY 2 DESC")
-        out("  testi per lingua: " + ", ".join(f"{l} {n:,}" for l, n in langs))
-        if st.get("sent"):
-            old = q("SELECT MIN(sent_at) FROM segments WHERE status='sent'")[0][0]
-            out(f"  in attesa di risposta: {st['sent']:,} (il piu vecchio inviato {datetime.fromtimestamp(old):%Y-%m-%d %H:%M})")
-        if st.get("error"):
-            errs = q("SELECT error, COUNT(*) FROM segments WHERE status='error' GROUP BY error ORDER BY 2 DESC LIMIT 5")
-            out("  errori principali: " + "; ".join(f"{e} ({n})" for e, n in errs))
-            todo(f"eTranslation: {st['error']:,} segmenti in errore")
-        left = st.get("new", 0) + st.get("sent", 0)
-        if left:
-            todo(f"eTranslation: {left:,} segmenti su {n_seg:,} ancora da tradurre (corpus)")
-        con.close()
-    show_file("traduzioni esportate", D / "translations.parquet")
+        out("  unified.sqlite: MANCA (translate_unified.py prepare non fatto qui)")
+        todo("eTranslation: unified.sqlite manca su questa macchina")
+        return
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=30)
+    q = lambda s: con.execute(s).fetchall()  # noqa: E731
+    out(f"  unified.sqlite: {size(db.stat().st_size)}, {mtime(db)}")
+    n_t, n_tr, chars = q("SELECT COUNT(*), SUM(n_segments > 0), SUM(CASE WHEN n_segments > 0 THEN n_chars END) FROM texts")[0]
+    out(f"  testi registrati: {n_t:,}   da tradurre (con segmenti): {n_tr or 0:,}   caratteri: {chars or 0:,}")
+    out("  origine della lingua: " + ", ".join(f"{a} {n:,}" for a, n in q(
+        "SELECT lang_source, COUNT(*) FROM texts GROUP BY 1 ORDER BY 2 DESC")))
+    out("  testi tradotti per lingua: " + ", ".join(f"{a} {n:,}" for a, n in q(
+        "SELECT lang, COUNT(*) FROM texts WHERE n_segments > 0 GROUP BY 1 ORDER BY 2 DESC")))
+    st = dict(q("SELECT status, COUNT(*) FROM segments GROUP BY status"))
+    out(f"  segmenti per stato: {st}")
+    if st.get("error"):
+        errs = q("SELECT error, COUNT(*) FROM segments WHERE status='error' GROUP BY error ORDER BY 2 DESC LIMIT 5")
+        out("  errori principali: " + "; ".join(f"{e} ({n})" for e, n in errs))
+        todo(f"eTranslation: {st['error']:,} segmenti in errore")
+    left = st.get("new", 0) + st.get("sent", 0)
+    if left:
+        todo(f"eTranslation: {left:,} segmenti ancora da tradurre in unified.sqlite")
+    show_file("traduzioni esportate", D / "unified_translations.parquet")
     log = D / "callbacks_unparsed.log"
     if log.exists():
         n = sum(1 for _ in open(log, encoding="utf-8", errors="replace"))
         out(f"  callbacks_unparsed.log: {n} righe (ultima {mtime(log)})")
-    if fast:
+
+    uni = DATA / "raw" / "unified" / "unified.parquet"
+    if fast or not uni.exists():
+        con.close()
         return
-    out("  confronto con il corpus grezzo (stessa selezione di prepare)...")
-    t0 = time.time()
-    by, other = corpus_non_english()
-    if by is None:
-        return
-    out(f"  {'anno':6}{'nel corpus':>12}{'in sqlite':>11}   ({time.time() - t0:.0f} s)")
-    for y in sorted(set(by) | set(seg_by_year)):
-        flag = "" if by.get(y, 0) == seg_by_year.get(y, 0) else "   <- non preparati" if by.get(y, 0) > seg_by_year.get(y, 0) else ""
-        out(f"  {y:<6}{by.get(y, 0):>12,}{seg_by_year.get(y, 0):>11,}{flag}")
-    gap = {y: by[y] - seg_by_year.get(y, 0) for y in by if by[y] > seg_by_year.get(y, 0)}
-    if gap:
-        todo("eTranslation: testi non inglesi del corpus non ancora in segments.sqlite: "
-             + ", ".join(f"{y}: {n:,}" for y, n in sorted(gap.items())))
-    if other:
-        out("  altre lingue nel corpus (non UE, non tradotte): " + ", ".join(f"{l} {n:,}" for l, n in other.most_common(8)))
+    import pandas as pd
+    out("  copertura: interventi del dataset unificato senza testo inglese (english_text = none)")
+    u = pd.read_parquet(uni, columns=["uid", "source", "year", "english_text", "category"])
+    seg = pd.DataFrame(q("SELECT text_id, COUNT(*), SUM(status = 'done') FROM segments GROUP BY text_id"),
+                       columns=["uid", "n", "done"])
+    con.close()
+    seg["full"] = seg["n"] == seg["done"]
+    need = u[u["english_text"] == "none"].merge(seg, on="uid", how="left")
+    need["full"] = need["full"].fillna(False).astype(bool)
+    need["oral"] = need["category"].astype(str).str.startswith("MEP, oral")
+    if len(need) and need["n"].notna().mean() < 0.5:
+        out("  ATTENZIONE: meno della meta degli uid si trova in unified.sqlite: gli identificativi forse non coincidono")
+    t = need.groupby(["year", "source"]).agg(senza_en=("uid", "size"), tradotti=("full", "sum"),
+                                             orali_MEP=("oral", "sum"),
+                                             orali_tradotti=("full", lambda x: int((x & need.loc[x.index, "oral"]).sum())))
+    t["mancano"] = t["senza_en"] - t["tradotti"]
+    out("  " + t.to_string().replace("\n", "\n  "))
+    miss = int(t["mancano"].sum())
+    miss_oral = int((t["orali_MEP"] - t["orali_tradotti"]).sum())
+    out(f"  totale senza traduzione: {miss:,} (di cui orali MEP: {miss_oral:,})")
+    if miss_oral:
+        todo(f"eTranslation: {miss_oral:,} interventi orali MEP senza testo inglese ne traduzione")
+    sc = DATA / "review" / "etranslation"
+    out(" punteggi EMI delle traduzioni (score_translations.py)")
+    parts = len(list((sc / "chunk_scores").glob("part-*.parquet")))
+    out(f"  parti di punteggi: {parts}")
+    if not show_file("EMI per intervento tradotto", sc / "speech_emi_mt.parquet"):
+        todo("score_translations.py: speech_emi_mt.parquet non c'e" + (f" ({parts} parti gia calcolate)" if parts else ""))
+    for f in ("yearly.csv", "trends.csv", "selection.csv"):
+        show_file(f, sc / f)
 
 
 # ---------------------------------------------------------------- main
