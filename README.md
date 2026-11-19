@@ -20,7 +20,6 @@ It extends to the European Parliament the approach of Aroyehun et al. (2025), wh
 4. **EMI score.** Both similarities are adjusted for chunk length (10-word bins) and standardised **over the whole corpus**. The *evidence-minus-intuition* score is `EMI = z(evidence) − z(intuition)`. Speech-level EMI is the mean over a speech's chunks. Positive values mean more evidence-like language; negative values mean more intuition-like language.
 5. **Main sample.** Until 2012 the Parliament published official English translations of speeches delivered in other languages, and the corpus also contains written statements and speeches by the chair, the Commission and the Council. To compare like with like over time, the main sample is restricted to **oral speeches by MEPs originally delivered in English**. These are identified from the speech header, for example `Name (GROUP). – (FR) …` marks a translation from French.
 6. **Speakers.** Political group is taken from the speech header, so it reflects the group *at the time of the speech*, and harmonised into stable families (Left, Greens/EFA, S&D, Liberals, EPP, Conservatives, Eurosceptics, Non-attached). Country comes from the MEP identifier linked to the European Parliament's official membership data.
-7. **Models.** Linear trends in EMI per decade, with speaker and/or agenda-item fixed effects and standard errors clustered by speaker.
 
 ## Pipeline
 
@@ -35,9 +34,6 @@ All steps live in `src/europarl_emi/` and are run as modules. Each step reads th
 | 5 | `step05_compute_emi` | Length adjustment, global standardisation, EMI per chunk and per speech | `data/processed/05_*.parquet` |
 | 6 | `step06_parse_headers` | Parse speech headers: role, original language (translation), written statement, group | `data/processed/06_speech_annotated.parquet` |
 | 7 | `step07_speakers` | Build the main sample; add country and political family | `data/processed/07_speech_main_sample.parquet` |
-| 8 | `step08_models` | Trend models with fixed effects and clustered standard errors | `results/tables/trend_models.csv` |
-| — | `figures` | All paper figures (Scientific Reports style) | `results/figures/paper/` |
-| — | `inspect_data` | Inventory and sanity checks of input files | console |
 
 ## Getting started
 
@@ -59,8 +55,6 @@ uv run python -m europarl_emi.step04_score_chunks     # ~30 min on an Apple-sili
 uv run python -m europarl_emi.step05_compute_emi
 uv run python -m europarl_emi.step06_parse_headers
 uv run python -m europarl_emi.step07_speakers
-uv run python -m europarl_emi.step08_models
-uv run python -m europarl_emi.figures                 # or: --only fig2 fig5
 ```
 
 All paths and parameters (chunk sizes, thresholds, random seed, embedding model) are set in `src/europarl_emi/config.py`.
@@ -81,23 +75,24 @@ Generated files go to `data/interim/` and `data/processed/`. The `models/` folde
 
 ```
 europarl-emi/
-├── src/europarl_emi/      pipeline steps, models, figures, configuration
+├── src/europarl_emi/      pipeline steps (EMI measure), eTranslation client, configuration
 ├── data/
 │   ├── raw/               original inputs (never modified)
 │   ├── interim/           intermediate outputs (regenerable)
 │   └── processed/         analysis datasets
 ├── models/                trained classifier
+├── notebooks/review/      data building: EP Open Data API download, corpus-API matching, unified dataset
+├── notebooks/analysis/    analyses, one numbered script per question
 ├── notebooks/legacy/      original exploratory Colab notebooks (reference only)
-└── results/
-    ├── figures/paper/     paper figures (PDF + PNG)
-    └── tables/            model estimates and supplementary tables
+├── scripts/               helper shell scripts (eTranslation runs)
+└── results/               generated tables and figures (not in git)
 ```
 
 ## Differences from the original exploratory notebooks
 
 The pipeline replaces two Colab notebooks (`notebooks/legacy/`). The main changes:
 
-- **Global standardisation.** The original code z-scored similarities within consecutive batches of 1,000 rows. Because the file was sorted by date, this forced the mean EMI of every year to zero and removed any time trend by construction (see Supplementary Fig. S9).
+- **Global standardisation.** The original code z-scored similarities within consecutive batches of 1,000 rows. Because the file was sorted by date, this forced the mean EMI of every year to zero and removed any time trend by construction.
 - **Speech-level aggregation.** Each speech counts once, instead of long speeches weighing more through their many chunks.
 - **Like-for-like sample.** Translations, written statements and non-MEP speakers are separated from original English oral speeches.
 - **Time-aware political groups.** Groups are read from each speech rather than from a single, first-listed affiliation per MEP; countries are linked by MEP identifier instead of fuzzy name matching.

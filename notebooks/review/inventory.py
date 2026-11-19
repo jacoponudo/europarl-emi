@@ -6,7 +6,7 @@ Gira uguale sul Mac e sul server; confrontando i due rapporti si vede cosa va co
     uv run python notebooks/review/inventory.py            # completo (legge anche il corpus grezzo, ~1-2 min)
     uv run python notebooks/review/inventory.py --fast     # salta corpus, testi API e copertura delle traduzioni
 
-Sezioni: 0 macchina e git | 1 file della pipeline | 2 varianti di sensibilita | 3 download API
+Sezioni: 0 macchina e git | 1 file della pipeline | 3 download API
          4 confronto corpus-API e dataset unificato | 5 eTranslation | 6 riepilogo delle cose da fare
 """
 
@@ -172,57 +172,6 @@ def section_pipeline():
     show_file("outputv2", I / "outputv2.csv.gzip")
     show_file("outputv2_filled", P / "outputv2_filled.csv.gzip")
     show_file("political_groups_simplified", P / "political_groups_simplified.csv", needed_for="legacy_global.py")
-    out(" risultati")
-    figs = sorted((ROOT / "results" / "figures" / "paper").glob("*.pdf"))
-    out(f"  [{'ok' if figs else 'MANCA':^5}] {'figure del paper (pdf)':34} {len(figs)}: "
-        + " ".join(x.stem for x in figs))
-    for name in ("trend_models.csv", "year_effects_speaker_fe.csv", "S3_examples.csv"):
-        show_file(f"tabella {name}", ROOT / "results" / "tables" / name)
-    show_file("paper_numbers.txt", ROOT / "results" / "paper_numbers.txt")
-
-
-# ---------------------------------------------------------------- 2. sensitivity variants
-
-def section_sensitivity():
-    title("2. VARIANTI DI SENSIBILITA (data/review/sensitivity/)")
-    R = DATA / "review" / "sensitivity"
-    names = ["v1_mpnet", "v2_word2vec", "v2b_word2vec_p80", "v3_mpnet_only", "v4_lexicon_count", "v5_minilm_noheader"]
-    extra = sorted(p.name for p in R.glob("*") if p.is_dir() and p.name not in names + ["logs"]) if R.exists() else []
-    for name in names + extra:
-        d = R / name
-        if not d.exists():
-            out(f"  [MANCA] {name}")
-            if name in ("v1_mpnet", "v2_word2vec"):
-                todo(f"sensibilita {name}: risultati non qui (cercarli sull'altra macchina o rilanciare)")
-            elif name in ("v4_lexicon_count", "v5_minilm_noheader", "v3_mpnet_only"):
-                todo(f"sensibilita {name}: risultati non qui (calcolati sul server?)")
-            continue
-        parts = len(list((d / "chunk_scores").glob("part-*.parquet")))
-        s = d / "speech_emi.parquet"
-        settings = {}
-        if (d / "settings.json").exists():
-            try:
-                settings = json.loads((d / "settings.json").read_text())
-            except ValueError:
-                pass
-        sample = settings.get("fraction")
-        if s.exists():
-            n, _ = parquet_rows(s)
-            state = f"finita: {n:,} discorsi, {mtime(s)}"
-            if sample not in (None, 1, 1.0):
-                state += f"  (CAMPIONE {sample})"
-                if not name.startswith("_smoke"):
-                        todo(f"sensibilita {name}: calcolata solo su un campione ({sample})")
-        else:
-            state = f"NON FINITA: {parts} parti di punteggi, manca speech_emi.parquet"
-            todo(f"sensibilita {name}: non finita ({parts} parti): rilanciare lo stesso comando")
-        out(f"  [{'ok' if s.exists() else 'parz':^5}] {name:22} {state}")
-    logs = sorted((R / "logs").glob("*.log")) if (R / "logs").exists() else []
-    if logs:
-        out("  log: " + ", ".join(f"{x.stem} ({mtime(x)})" for x in logs))
-    for f in ("sensitivity.csv", "scale_compare.csv", "compare_panels.pdf"):
-        p = ROOT / "notebooks" / "review" / "sensitivity" / f
-        out(f"  [{'ok' if p.exists() else 'MANCA':^5}] {f:22} " + (mtime(p) if p.exists() else ""))
 
 
 # ---------------------------------------------------------------- 3. API download
@@ -380,7 +329,7 @@ def section_etranslation(fast):
     D = DATA / "interim" / "etranslation"
     old = D / "segments.sqlite"
     if old.exists():
-        out(f"  segments.sqlite (vecchio translate.py, API v1, superato): {size(old.stat().st_size)}, {mtime(old)}")
+        out(f"  segments.sqlite (vecchio translate.py, API v1, rimosso da git): {size(old.stat().st_size)}, {mtime(old)}")
     db = D / "unified.sqlite"
     if not db.exists():
         out("  unified.sqlite: MANCA (translate_unified.py prepare non fatto qui)")
@@ -436,14 +385,6 @@ def section_etranslation(fast):
     out(f"  totale senza traduzione: {miss:,} (di cui orali MEP: {miss_oral:,})")
     if miss_oral:
         todo(f"eTranslation: {miss_oral:,} interventi orali MEP senza testo inglese ne traduzione")
-    sc = DATA / "review" / "etranslation"
-    out(" punteggi EMI delle traduzioni (score_translations.py)")
-    parts = len(list((sc / "chunk_scores").glob("part-*.parquet")))
-    out(f"  parti di punteggi: {parts}")
-    if not show_file("EMI per intervento tradotto", sc / "speech_emi_mt.parquet"):
-        todo("score_translations.py: speech_emi_mt.parquet non c'e" + (f" ({parts} parti gia calcolate)" if parts else ""))
-    for f in ("yearly.csv", "trends.csv", "selection.csv"):
-        show_file(f, sc / f)
 
 
 # ---------------------------------------------------------------- main
@@ -455,7 +396,6 @@ def main():
     t0 = time.time()
     section_machine()
     section_pipeline()
-    section_sensitivity()
     section_api(args.fast)
     section_unified()
     section_etranslation(args.fast)

@@ -54,7 +54,7 @@ import pandas as pd
 
 from europarl_emi import config as cfg
 from europarl_emi.step06_parse_headers import parse_header
-from europarl_emi.step08_models import TERM_STARTS
+from europarl_emi.config import TERM_STARTS
 
 RAW = cfg.RAW_CORPUS / "all_years_combined.csv.gzip"
 ANNOTATED = cfg.PROCESSED / "06_speech_annotated.parquet"
