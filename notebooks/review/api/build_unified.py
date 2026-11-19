@@ -53,7 +53,7 @@ import time
 import pandas as pd
 
 from europarl_emi import config as cfg
-from europarl_emi.step06_parse_headers import parse_header
+from europarl_emi.headers import parse_header
 from europarl_emi.config import TERM_STARTS
 
 RAW = cfg.RAW_CORPUS / "all_years_combined.csv.gzip"
