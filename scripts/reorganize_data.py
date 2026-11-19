@@ -182,7 +182,8 @@ def build_plan() -> Plan:
     # sensitivity variants
     sens = D / "review" / "sensitivity"
     if sens.is_dir():
-        for v in sorted(p for p in sens.iterdir() if p.is_dir() and p.name != "logs"):
+        # _smoke_*: test runs on small samples, not methodologies -> deleted
+        for v in sorted(p for p in sens.iterdir() if p.is_dir() and p.name != "logs" and not p.name.startswith("_smoke")):
             name, what = VARIANTS.get(v.name, (re.sub(r"^v\d+b?_", "", v.name), "see the variant code (git history)"))
             info = find_scores(v)
             dst = D / "scores" / f"{name}_{day(v)}"
@@ -220,9 +221,22 @@ def summarise_deletions(files: list[Path]) -> pd.DataFrame:
 
 
 def etranslation_busy() -> bool:
-    wal = D / "interim" / "etranslation" / "unified.sqlite-wal"
-    running = subprocess.run(["pgrep", "-f", "translate_unified run"], capture_output=True).returncode == 0
-    return running or (wal.exists() and wal.stat().st_size > 0)
+    return subprocess.run(["pgrep", "-f", "translate_unified run"], capture_output=True).returncode == 0
+
+
+def checkpoint(db: Path) -> None:
+    """Write the -wal journal into the database file, so that the .sqlite alone holds everything."""
+    import sqlite3
+
+    if not db.exists():
+        return
+    con = sqlite3.connect(db)
+    busy, log, done = con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    n = con.execute("SELECT COUNT(*) FROM segments WHERE status = 'done'").fetchone()[0]
+    con.close()
+    if busy:
+        raise SystemExit(f"{rel(db)} is in use: close every program using it and run again.")
+    print(f"{rel(db)}: journal written into the database ({done} pages); translated segments: {n:,}")
 
 
 def main() -> None:
@@ -246,6 +260,12 @@ def main() -> None:
         t = summarise_deletions(dels)
         for r in t.itertuples():
             print(f"  {r.folder:<50} {r.files:>7,} files  {human(r.size):>9}")
+            if r.files <= 12:  # few files: show them
+                for f in dels:
+                    parts = f.relative_to(D).parts
+                    g = "data/" + "/".join(parts[:2] if len(parts) > 2 else parts[:1])
+                    if g == r.folder:
+                        print(f"      {f.relative_to(D / r.folder.removeprefix('data/'))}  {human(f.stat().st_size)}")
         print(f"  {'total':<50} {len(dels):>7,} files  {human(t['size'].sum()):>9}")
     for s, _, _ in pl.extracts:
         print(f"  {rel(s)}  (after extracting the scores)  {human(size(s))}")
@@ -254,7 +274,8 @@ def main() -> None:
         print("\nDry run: nothing changed. Check the lists, then run again with --apply.")
         return
     if etranslation_busy():
-        raise SystemExit("eTranslation seems to be running (or the database has unsaved changes): stop it first.")
+        raise SystemExit("eTranslation seems to be running: stop it first (sh scripts/etranslation.sh stop).")
+    checkpoint(D / "interim" / "etranslation" / "unified.sqlite")
 
     for s, d, x in pl.extracts:
         df = to_speech_emi(x["info"])
@@ -270,7 +291,7 @@ def main() -> None:
         d.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(s), str(d))
     for f in dels:
-        f.unlink()
+        f.unlink(missing_ok=True)
     for s, _, _ in pl.extracts:
         shutil.rmtree(s) if s.is_dir() else s.unlink()
     for p in sorted((p for p in D.rglob("*") if p.is_dir()), key=lambda p: -len(p.parts)):
