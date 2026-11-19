@@ -19,7 +19,7 @@ if [ -z "$ZSH_VERSION" ]; then exec zsh "$0" "$@"; fi
 SELF="${0:A}"                     # percorso di questo file (dentro le funzioni $0 è il nome della funzione)
 cd "${SELF:h}/.." || exit 1         # cartella del progetto (questo file sta in scripts/)
 PORT=8765
-LOGDIR=data/interim/etranslation/logs
+LOGDIR=results/logs/etranslation
 ENDPOINT=https://language-tools.ec.europa.eu/etranslation/api/askTranslate
 MOD=europarl_emi.etranslation.translate_unified
 KC=etranslation                     # nome della voce nel Portachiavi

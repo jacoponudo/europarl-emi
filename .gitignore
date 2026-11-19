@@ -12,7 +12,7 @@ dist/
 data/**
 !data/**/
 !**/.gitkeep
-!data/raw/lexicons/*.csv
+!data/raw/inherited/lexicons/*.csv
 /paper/
 models/
 
@@ -25,5 +25,4 @@ notebooks/**/*.pdf
 notebooks/**/*.png
 notebooks/**/*.tex
 notebooks/**/*.parquet
-notebooks/review/*.ipynb
 *.log

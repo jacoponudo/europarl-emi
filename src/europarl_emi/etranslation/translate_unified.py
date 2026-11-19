@@ -4,7 +4,7 @@ Flusso:
   1. prepare  : legge il dataset, riconosce la lingua di ogni testo (lingua-py, in locale,
                 limitato alle 24 lingue UE; il maltese con una regola sui caratteri), e
                 spezza i testi non inglesi in segmenti <= 4500 caratteri ai confini di frase
-                -> SQLite (data/interim/etranslation/unified.sqlite)
+                -> SQLite (data/translation/etranslation.sqlite)
   2. run      : avvia il ricevitore dei callback su 127.0.0.1:8765, invia i segmenti a
                 eTranslation v2 (askTranslate, HTTP Basic) e salva le traduzioni che arrivano
   3. status   : conteggi per stato e per lingua, e disaccordi con la colonna lingua del dataset
@@ -23,7 +23,7 @@ Credenziali (mai nel codice): variabili d'ambiente ETR_USER / ETR_PASS
 Esempio (Mac, zsh):
   uv run --with lingua-language-detector --with tqdm \
       python -m europarl_emi.etranslation.translate_unified prepare \
-      --input data/processed/unified.parquet --id-col speech_id --text-col text \
+      --input data/translation/unified.parquet --id-col uid --text-col text \
       --lang-col original_language
   cloudflared tunnel --url http://127.0.0.1:8765      # in un'altra finestra
   uv run --with truststore --with tqdm python -m europarl_emi.etranslation.translate_unified run \
@@ -48,9 +48,9 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 ENDPOINT = "https://language-tools.ec.europa.eu/etranslation/api/askTranslate"
-DEFAULT_DB = Path("data/interim/etranslation/unified.sqlite")
-DEFAULT_OUT = Path("data/interim/etranslation/unified_translations.parquet")
-LOG_DIR = Path("data/interim/etranslation")
+DEFAULT_DB = Path("data/translation/etranslation.sqlite")
+DEFAULT_OUT = Path("data/translation/etranslation_export.parquet")
+LOG_DIR = Path("results/logs/etranslation")
 
 # Le 24 lingue ufficiali UE (codici eTranslation, ISO 639-1 maiuscolo)
 EU_LANGS = {

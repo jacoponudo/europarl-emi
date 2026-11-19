@@ -1,12 +1,12 @@
-"""REVIEW ONLY. Download plenary speeches from the European Parliament Open Data API (v2, /speeches).
+"""Download plenary speeches from the European Parliament Open Data API (v2, /speeches).
 
 The API has complete data from July 2021. For each weekday, all speeches of that sitting day,
 100 per request. Kept for each speech: the original-language text and, for speeches not given in
 English, the English machine translation provided by the API (xml:lang "xx-t-en-mtec").
 Resumable: one file per day; days without a sitting give an empty file.
 
-    uv run python notebooks/review/api/download_speeches.py                                    # 2021-07-01 to today
-    uv run python notebooks/review/api/download_speeches.py --start 2025-01-20 --end 2025-01-20   # test
+    uv run python notebooks/api/download_speeches.py                                    # 2021-07-01 to today
+    uv run python notebooks/api/download_speeches.py --start 2025-01-20 --end 2025-01-20   # test
 
 Output: data/raw/api/speeches/YYYY-MM-DD.jsonl (one speech per line)
 """
@@ -24,7 +24,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "data" / "raw" / "api" / "speeches"
 BASE = "https://data.europarl.europa.eu/api/v2/speeches"
 PAGE = 100

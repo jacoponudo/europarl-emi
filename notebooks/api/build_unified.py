@@ -1,4 +1,4 @@
-"""REVIEW ONLY. Dataset unificato: corpus ereditato fino al 30-06-2021, API del Parlamento dal 01-07-2021.
+"""Dataset unificato: corpus ereditato fino al 30-06-2021, API del Parlamento dal 01-07-2021.
 
 Una riga per intervento, stesse colonne per le due fonti, nessun intervento contato due volte.
 La sovrapposizione luglio 2021 - novembre 2023 serve solo a controllare le regole (sezione C):
@@ -39,9 +39,11 @@ Regola omogenea (category)
   Corpus, testo non inglese: Not English prima del 2013; dal 2013 (lingua del testo = lingua
     originale) dai metadati, con le parole "in writing" e "President" nelle lingue UE.
 
-Uso (Mac, dopo overlap_corpus_api.py, che scrive data/review/overlap/pairs.parquet):
-    uv run python notebooks/review/api/build_unified.py 2>&1 | tee data/raw/unified/build.log
-Esce: data/raw/unified/unified.parquet e tabelle di riepilogo nella stessa cartella (fuori da git).
+Uso (Mac):
+    mkdir -p results/logs && uv run python notebooks/api/build_unified.py 2>&1 | tee results/logs/build_unified.log
+Esce: data/translation/unified.parquet; tabelle di riepilogo in results/tables/unified/.
+I controlli con la vecchia pipeline (06_speech_annotated.parquet) e con le coppie corpus-API
+(overlap_corpus_api.py, ora solo nella storia di git) si fanno solo se quei file esistono ancora.
 """
 
 from __future__ import annotations
@@ -56,12 +58,13 @@ from europarl_emi import config as cfg
 from europarl_emi.headers import parse_header
 from europarl_emi.config import TERM_STARTS
 
-RAW = cfg.RAW_CORPUS / "all_years_combined.csv.gzip"
-ANNOTATED = cfg.PROCESSED / "06_speech_annotated.parquet"
-MEP_DB = cfg.PROCESSED / "mep_database_1994_present.csv"
-API_DIR = cfg.DATA / "raw" / "api" / "speeches"
-PAIRS = cfg.DATA / "review" / "overlap" / "pairs.parquet"
-OUT = cfg.DATA / "raw" / "unified"
+RAW = cfg.CORPUS
+ANNOTATED = cfg.DATA / "processed" / "06_speech_annotated.parquet"  # facoltativo: vecchia pipeline, solo controllo
+MEP_DB = cfg.MEP_DB
+API_DIR = cfg.RAW_API
+PAIRS = cfg.DATA / "review" / "overlap" / "pairs.parquet"  # facoltativo: vecchio overlap_corpus_api.py, solo controllo
+UNIFIED = cfg.UNIFIED
+OUT = cfg.TABLES / "unified"  # tabelle di riepilogo
 
 API_START = pd.Timestamp("2021-07-01")  # da qui la fonte è l'API
 FALLBACK_FROM = pd.Timestamp("2020-01-01")  # da qui, nel corpus, intestazioni non riconosciute decise dai metadati
@@ -204,14 +207,18 @@ def load_corpus(meps):
     c.loc[c.text_language.ne("en"), "category_header"] = NOT_EN
 
     # controllo: sui testi della Fig. 1 la regola deve dare esattamente le categorie della pipeline
-    ann = pd.read_parquet(ANNOTATED, columns=["guid", "role", "written", "translated", "header_found"])
-    ann["fig1"] = [fig1(r, w, t, f) for r, w, t, f in zip(ann.role, ann.written, ann.translated, ann.header_found)]
-    chk = ann.merge(c[["guid", "category_header"]], on="guid", how="left")
-    diff = chk.fig1 != chk.category_header
-    print(f"controllo sui {len(ann):,} testi della Fig. 1: categoria diversa da quella della pipeline in "
-          f"{diff.sum():,} casi {'(ok)' if diff.sum() == 0 else '(DIVERSO: vedi sotto)'}")
-    if diff.any():
-        print(pd.crosstab(chk.fig1[diff], chk.category_header[diff].fillna("assente")).to_string())
+    # (solo se c'è ancora l'output del passo 6 della vecchia pipeline)
+    if ANNOTATED.exists():
+        ann = pd.read_parquet(ANNOTATED, columns=["guid", "role", "written", "translated", "header_found"])
+        ann["fig1"] = [fig1(r, w, t, f) for r, w, t, f in zip(ann.role, ann.written, ann.translated, ann.header_found)]
+        chk = ann.merge(c[["guid", "category_header"]], on="guid", how="left")
+        diff = chk.fig1 != chk.category_header
+        print(f"controllo sui {len(ann):,} testi della Fig. 1: categoria diversa da quella della pipeline in "
+              f"{diff.sum():,} casi {'(ok)' if diff.sum() == 0 else '(DIVERSO: vedi sotto)'}")
+        if diff.any():
+            print(pd.crosstab(chk.fig1[diff], chk.category_header[diff].fillna("assente")).to_string())
+    else:
+        print(f"controllo con la vecchia pipeline saltato: manca {ANNOTATED.relative_to(cfg.ROOT)}")
 
     c["person_id"] = norm_id(c.detectedmepid)
     c["term"] = c.date.map(term_of)
@@ -326,7 +333,7 @@ def load_api(meps):
 def validate(corpus, api):
     section("C. Controllo della regola del corpus sulla sovrapposizione (stessi interventi nelle due fonti)")
     if not PAIRS.exists():
-        print(f"manca {PAIRS.relative_to(cfg.ROOT)}: lancia prima overlap_corpus_api.py")
+        print(f"controllo saltato: manca {PAIRS.relative_to(cfg.ROOT)} (overlap_corpus_api.py, storia di git)")
         return
     p = pd.read_parquet(PAIRS, columns=["guid", "sid"])
     c = corpus.set_index("source_id")[["category", "category_rule", "category_header"]]
@@ -380,6 +387,7 @@ def summary(u):
 def main():
     t0 = time.time()
     OUT.mkdir(parents=True, exist_ok=True)
+    UNIFIED.parent.mkdir(parents=True, exist_ok=True)
     meps = sitting_meps()
     corpus = load_corpus(meps)
     api = load_api(meps)
@@ -390,8 +398,8 @@ def main():
     for col in ["written", "sitting_mep", "main_series"]:
         u[col] = u[col].astype("boolean")
     summary(u)
-    u.to_parquet(OUT / "unified.parquet", index=False)
-    print(f"\nSalvato {(OUT / 'unified.parquet').relative_to(cfg.ROOT)} ({len(u):,} righe) in {time.time() - t0:.0f} s")
+    u.to_parquet(UNIFIED, index=False)
+    print(f"\nSalvato {UNIFIED.relative_to(cfg.ROOT)} ({len(u):,} righe) in {time.time() - t0:.0f} s")
 
 
 if __name__ == "__main__":
