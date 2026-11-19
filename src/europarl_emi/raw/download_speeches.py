@@ -5,8 +5,8 @@ The API has complete data from July 2021. For each weekday, all speeches of that
 English, the English machine translation provided by the API (xml:lang "xx-t-en-mtec").
 Resumable: one file per day; days without a sitting give an empty file.
 
-    uv run python notebooks/api/download_speeches.py                                    # 2021-07-01 to today
-    uv run python notebooks/api/download_speeches.py --start 2025-01-20 --end 2025-01-20   # test
+    uv run python -m europarl_emi.raw.download_speeches                                    # 2021-07-01 to today
+    uv run python -m europarl_emi.raw.download_speeches --start 2025-01-20 --end 2025-01-20   # test
 
 Output: data/raw/api/speeches/YYYY-MM-DD.jsonl (one speech per line)
 """
@@ -24,8 +24,9 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "data" / "raw" / "api" / "speeches"
+from europarl_emi import config as cfg
+
+OUT = cfg.RAW_API
 BASE = "https://data.europarl.europa.eu/api/v2/speeches"
 PAGE = 100
 PAUSE = 1.2  # seconds between requests: about 250 per 5 minutes, well under the API limit

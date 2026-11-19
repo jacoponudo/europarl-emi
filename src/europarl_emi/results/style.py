@@ -1,7 +1,6 @@
 """Shared figure style for the paper figures: Nature Human Behaviour look and the project palette.
 
-Usage (from a script in notebooks/paper/):
-    from nhb_style import PALETTE, C, apply_style, panel_label, mm, save
+    from europarl_emi.results.style import PALETTE, C, apply_style, panel_label, mm, save
 """
 
 from __future__ import annotations

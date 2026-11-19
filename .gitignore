@@ -20,9 +20,4 @@ models/
 results/**
 !results/**/
 !**/.gitkeep
-notebooks/**/*.csv
-notebooks/**/*.pdf
-notebooks/**/*.png
-notebooks/**/*.tex
-notebooks/**/*.parquet
 *.log

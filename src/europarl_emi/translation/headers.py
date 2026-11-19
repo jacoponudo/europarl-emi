@@ -1,5 +1,5 @@
 """Speech headers in the Parliament's verbatim reports: who speaks, in what role, and whether the text
-is a translation. Used by the API scripts (overlap_corpus_api.py, build_unified.py).
+is a translation. Used by build_unified.py.
 
 Every speech starts with a header, for example:
     "De Esteban Martin (PPE). - (ES) Mr President, ..."      -> translated from Spanish

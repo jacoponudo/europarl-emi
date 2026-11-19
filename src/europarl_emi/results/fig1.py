@@ -1,20 +1,20 @@
 """Figure 1. Speeches delivered in English and translated with eTranslation: how many, and their EMI.
 
 Data
-  data/translation/unified.parquet, data/translation/etranslation.sqlite   (read through unified.py)
-  data/scores/minilm_150_<date>/speech_emi.parquet                         (score_unified.py; --scores)
+  data/translation/unified.parquet, data/translation/etranslation.sqlite   (translation/unified.py)
+  data/scores/minilm_150_<date>/speech_emi.parquet                         (scores/score_unified.py; --scores)
 eTranslation was run on every non-English text of unified from 2013: before 2013 the corpus holds only the
 English version (the Parliament's human translation), so there is no original-language text to translate.
 
-Population: MEP oral speeches. Groups: delivered in English, translated with eTranslation (unified.py).
+Population: MEP oral speeches. Groups: delivered in English, translated with eTranslation.
 Panel a  speeches per year in each group (stacked bars). --show-human adds the Parliament's human
          translations (to 2012) as a third series.
 Panel b  mean EMI per year, with percentile bootstrap 95% intervals (resampling speeches within year,
          B = 2000, seed 42), for: all speeches (both groups), delivered in English, translated.
 
-    uv run python -m europarl_emi.score_unified          # once: EMI scores (slow part)
-    uv run python notebooks/paper/fig1.py                # latest data/scores/minilm_150_* folder
-    uv run python notebooks/paper/fig1.py --scores minilm_150_20261119 --show-human
+    uv run python -m europarl_emi.scores.score_unified    # once: EMI scores (slow part)
+    uv run python -m europarl_emi.results.fig1            # latest data/scores/minilm_150_* folder
+    uv run python -m europarl_emi.results.fig1 --scores minilm_150_20261119 --show-human
 
 Out:
   results/figures/paper/fig1.pdf / .png
@@ -25,7 +25,6 @@ Out:
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 import matplotlib
@@ -36,11 +35,11 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MultipleLocator  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from nhb_style import BAND, DOUBLE, INK, MUTED, PALETTE, apply_style, mm, panel_label, save, ygrid  # noqa: E402
-
 from europarl_emi import config as cfg  # noqa: E402
-from europarl_emi.unified import load  # noqa: E402
+from europarl_emi.results.style import (  # noqa: E402
+    BAND, DOUBLE, INK, MUTED, PALETTE, apply_style, mm, panel_label, save, ygrid,
+)
+from europarl_emi.translation.unified import load  # noqa: E402
 
 OUT = cfg.TABLES / "fig1"
 FIG = cfg.FIGURES / "paper" / "fig1"
@@ -68,7 +67,7 @@ def by_year(u: pd.DataFrame) -> pd.DataFrame:
 def latest_scores() -> Path:
     runs = sorted(cfg.SCORES.glob(f"{cfg.MODEL_SHORT}_{cfg.CHUNK_MAX_WORDS}_*/speech_emi.parquet"))
     if not runs:
-        raise SystemExit("No EMI scores: run first  uv run python -m europarl_emi.score_unified")
+        raise SystemExit("No EMI scores: run first  uv run python -m europarl_emi.scores.score_unified")
     return runs[-1].parent
 
 

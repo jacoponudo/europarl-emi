@@ -135,7 +135,7 @@ def summarise_deletions(files: list[Path]) -> pd.DataFrame:
 
 
 def etranslation_busy() -> bool:
-    return subprocess.run(["pgrep", "-f", "translate_unified run"], capture_output=True).returncode == 0
+    return subprocess.run(["pgrep", "-f", "translate_unified run|translation.etranslation run"], capture_output=True).returncode == 0
 
 
 def checkpoint(db: Path) -> None:

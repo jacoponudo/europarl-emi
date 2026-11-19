@@ -22,11 +22,11 @@ Credenziali (mai nel codice): variabili d'ambiente ETR_USER / ETR_PASS
 
 Esempio (Mac, zsh):
   uv run --with lingua-language-detector --with tqdm \
-      python -m europarl_emi.etranslation.translate_unified prepare \
+      python -m europarl_emi.translation.etranslation prepare \
       --input data/translation/unified.parquet --id-col uid --text-col text \
       --lang-col original_language
   cloudflared tunnel --url http://127.0.0.1:8765      # in un'altra finestra
-  uv run --with truststore --with tqdm python -m europarl_emi.etranslation.translate_unified run \
+  uv run --with truststore --with tqdm python -m europarl_emi.translation.etranslation run \
       --public-url https://xxxx.trycloudflare.com --limit 5
 """
 
@@ -47,10 +47,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
 
+from europarl_emi import config as cfg
+
 ENDPOINT = "https://language-tools.ec.europa.eu/etranslation/api/askTranslate"
-DEFAULT_DB = Path("data/translation/etranslation.sqlite")
-DEFAULT_OUT = Path("data/translation/etranslation_export.parquet")
-LOG_DIR = Path("results/logs/etranslation")
+DEFAULT_DB = cfg.ETRANSLATION_DB
+DEFAULT_OUT = cfg.TRANSLATION / "etranslation_export.parquet"
+LOG_DIR = cfg.LOGS / "etranslation"
 
 # Le 24 lingue ufficiali UE (codici eTranslation, ISO 639-1 maiuscolo)
 EU_LANGS = {

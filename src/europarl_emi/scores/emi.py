@@ -1,6 +1,6 @@
 """EMI measure (evidence minus intuition, Aroyehun et al. 2025), as in the paper baseline.
 
-Functions taken unchanged from the original pipeline (steps 4 and 5, still in the git history):
+Functions taken unchanged from the original pipeline (steps 4 and 5, in the git history up to ba52117):
     split_into_chunks  chunks of <= CHUNK_MAX_WORDS words; a last chunk < CHUNK_MIN_WORDS joins the previous one
     pick_device        mps / cuda / cpu
     lexicon_vectors    mean embedding of the evidence and intuition lexicons

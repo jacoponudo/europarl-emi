@@ -21,7 +21,7 @@ cd "${SELF:h}/.." || exit 1         # cartella del progetto (questo file sta in 
 PORT=8765
 LOGDIR=results/logs/etranslation
 ENDPOINT=https://language-tools.ec.europa.eu/etranslation/api/askTranslate
-MOD=europarl_emi.etranslation.translate_unified
+MOD=europarl_emi.translation.etranslation
 KC=etranslation                     # nome della voce nel Portachiavi
 SPEED=(--pause 0.1 --max-inflight 50)
 mkdir -p $LOGDIR

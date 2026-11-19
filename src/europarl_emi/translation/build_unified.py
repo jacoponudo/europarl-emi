@@ -40,7 +40,7 @@ Regola omogenea (category)
     originale) dai metadati, con le parole "in writing" e "President" nelle lingue UE.
 
 Uso (Mac):
-    mkdir -p results/logs && uv run python notebooks/api/build_unified.py 2>&1 | tee results/logs/build_unified.log
+    mkdir -p results/logs && uv run python -m europarl_emi.translation.build_unified 2>&1 | tee results/logs/build_unified.log
 Esce: data/translation/unified.parquet; tabelle di riepilogo in results/tables/unified/.
 I controlli con la vecchia pipeline (06_speech_annotated.parquet) e con le coppie corpus-API
 (overlap_corpus_api.py, ora solo nella storia di git) si fanno solo se quei file esistono ancora.
@@ -55,7 +55,7 @@ import time
 import pandas as pd
 
 from europarl_emi import config as cfg
-from europarl_emi.headers import parse_header
+from europarl_emi.translation.headers import parse_header
 from europarl_emi.config import TERM_STARTS
 
 RAW = cfg.CORPUS
