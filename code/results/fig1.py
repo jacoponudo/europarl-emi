@@ -6,15 +6,16 @@ Data
 eTranslation was run on every non-English text of unified from 2013: before 2013 the corpus holds only the
 English version (the Parliament's human translation), so there is no original-language text to translate.
 
-Population: MEP oral speeches. Groups: delivered in English, translated with eTranslation.
-Panel a  speeches per year in each group (stacked bars). --show-human adds the Parliament's human
-         translations (to 2012) as a third series.
+Population: MEP oral speeches, in three groups by the source of their English text (translation/unified.py):
+delivered in English; translated by hand by the Parliament (to 2012); translated with eTranslation (from 2013).
+Panel a  speeches per year in each group (stacked bars).
 Panel b  mean EMI per year, with percentile bootstrap 95% intervals (resampling speeches within year,
-         B = 2000, seed 42), for: all speeches (both groups), delivered in English, translated.
+         B = 2000, seed 42), for each group and for all speeches together.
+--without-human leaves the Parliament's human translations out of both panels and of "all speeches".
 
     uv run python code/scores/score_unified.py    # once: EMI scores (slow part)
     uv run python code/results/fig1.py            # latest data/scores/minilm_150_* folder
-    uv run python code/results/fig1.py --scores minilm_150_20261119 --show-human
+    uv run python code/results/fig1.py --scores minilm_150_20261119 --without-human
 
 Out:
   results/figures/paper/fig1.pdf / .png
@@ -49,7 +50,9 @@ B = 2000
 ORIGINAL = ("original", "Delivered in English", PALETTE["Cherry Rose"])
 ETRANSLATION = ("etranslation", "Translated with eTranslation", PALETTE["Pacific Cyan"])
 HUMAN = ("human", "Human translation (European Parliament)", PALETTE["Dusty Grape"])
-ALL = ("all", "All speeches", PALETTE["Dusty Grape"])
+# all speeches: a neutral dark grey, dashed. The palette is one gradient: no fourth hue stays distinct from the
+# three groups, so the aggregate takes no hue of its own.
+ALL = ("all", "All speeches", "#3d3d3d")
 
 
 # ---------------------------------------------------------------- data
@@ -71,10 +74,13 @@ def latest_scores() -> Path:
     return runs[-1].parent
 
 
-def speech_emi(u: pd.DataFrame, scores: Path) -> pd.DataFrame:
+def speech_emi(u: pd.DataFrame, scores: Path, groups: list[str]) -> pd.DataFrame:
     sp = pd.read_parquet(scores / "speech_emi.parquet", columns=["uid", "emi"])
     sp = sp.merge(u[["uid", "year", "group"]], on="uid", how="inner")
-    sp = sp[sp.group.isin(["original", "etranslation"])]
+    sp = sp[sp.group.isin(groups)]
+    missing = [g for g in groups if not sp.group.eq(g).any()]
+    if missing:
+        raise SystemExit(f"{scores.name} has no scores for {missing}: run score_unified.py again.")
     print(f"EMI from {scores.relative_to(cfg.ROOT)}: {len(sp):,} speeches {sp.group.value_counts().to_dict()}")
     return sp
 
@@ -89,11 +95,10 @@ def boot_mean(x: np.ndarray, rng: np.random.Generator, b: int = B) -> tuple[floa
     return float(lo), float(hi)
 
 
-def emi_by_year(sp: pd.DataFrame, b: int) -> pd.DataFrame:
+def emi_by_year(sp: pd.DataFrame, b: int, groups: list[str]) -> pd.DataFrame:
     rng = np.random.default_rng(cfg.SEED)
     rows = []
-    for key, sel in (("all", sp), ("original", sp[sp.group.eq("original")]),
-                     ("etranslation", sp[sp.group.eq("etranslation")])):
+    for key, sel in [("all", sp)] + [(g, sp[sp.group.eq(g)]) for g in groups]:
         for year, x in sel.groupby("year").emi:
             x = x.to_numpy()
             lo, hi = boot_mean(x, rng, b) if len(x) > 1 else (np.nan, np.nan)
@@ -111,10 +116,10 @@ def coverage_band(ax, label: bool) -> None:
                 ha="center", va="bottom", fontsize=5.5, color=MUTED, clip_on=False)
 
 
-def panel_a(ax, t: pd.DataFrame, show_human: bool) -> None:
+def panel_a(ax, t: pd.DataFrame, series: list) -> None:
     x = t.index.to_numpy()
     bottom = 0
-    for key, label, color in [ORIGINAL, ETRANSLATION] + ([HUMAN] if show_human else []):
+    for key, label, color in series:
         ax.bar(x, t[key], bottom=bottom, width=0.8, color=color, label=label, edgecolor="white", linewidth=0.4)
         bottom = bottom + t[key]
     coverage_band(ax, label=True)
@@ -124,11 +129,11 @@ def panel_a(ax, t: pd.DataFrame, show_human: bool) -> None:
     ax.legend(loc="upper left", handlelength=1.0, handleheight=0.8, borderaxespad=0.2, labelspacing=0.3)
 
 
-def panel_b(ax, e: pd.DataFrame) -> None:
+def panel_b(ax, e: pd.DataFrame, series: list) -> None:
     coverage_band(ax, label=False)
     ax.axhline(0, color=MUTED, linewidth=0.5, linestyle=(0, (3, 2)), zorder=1)
-    # all speeches: dashed line on top, because before 2013 it coincides with "delivered in English"
-    for key, label, color in (ORIGINAL, ETRANSLATION, ALL):
+    # all speeches: dashed line on top
+    for key, label, color in series + [ALL]:
         d = e[e.group.eq(key)].sort_values("year")
         dashed = key == "all"
         ax.fill_between(d.year, d.ci_low, d.ci_high, color=color, alpha=0.12 if dashed else 0.2,
@@ -142,12 +147,12 @@ def panel_b(ax, e: pd.DataFrame) -> None:
     ax.legend(loc="lower left", handlelength=1.6, borderaxespad=0.2, labelspacing=0.3)
 
 
-def figure(t: pd.DataFrame, e: pd.DataFrame, show_human: bool) -> None:
+def figure(t: pd.DataFrame, e: pd.DataFrame, series: list) -> None:
     apply_style()
     fig, (a, b) = plt.subplots(2, 1, figsize=(mm(DOUBLE), mm(130)), sharex=True,
                                gridspec_kw={"hspace": 0.18})
-    panel_a(a, t, show_human)
-    panel_b(b, e)
+    panel_a(a, t, series)
+    panel_b(b, e, series)
     x = t.index.to_numpy()
     b.set_xlim(x.min() - 0.7, x.max() + 0.7)
     b.xaxis.set_major_locator(MultipleLocator(4))
@@ -162,7 +167,8 @@ def figure(t: pd.DataFrame, e: pd.DataFrame, show_human: bool) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--scores", help="folder in data/scores (default: the latest minilm_150_*)")
-    ap.add_argument("--show-human", action="store_true", help="panel a: add the Parliament's human translations")
+    ap.add_argument("--without-human", action="store_true",
+                    help="leave out the Parliament's human translations (to 2012)")
     ap.add_argument("--bootstrap", type=int, default=B, help=f"bootstrap resamples (default {B})")
     args = ap.parse_args()
     pd.set_option("display.width", 200)
@@ -174,13 +180,15 @@ def main() -> None:
     print("\nPanel a, speeches per year (other = no English text, not in the figure):")
     print(t.to_string())
 
-    sp = speech_emi(u, cfg.SCORES / args.scores if args.scores else latest_scores())
-    e = emi_by_year(sp, args.bootstrap)
+    series = [ORIGINAL, ETRANSLATION] if args.without_human else [ORIGINAL, HUMAN, ETRANSLATION]
+    groups = [k for k, _, _ in series]
+    sp = speech_emi(u, cfg.SCORES / args.scores if args.scores else latest_scores(), groups)
+    e = emi_by_year(sp, args.bootstrap, groups)
     e.to_csv(OUT / "emi_by_year.csv", index=False)
     print(f"\nPanel b, mean EMI per year (percentile bootstrap 95%, B = {args.bootstrap}):")
     print(e.pivot(index="year", columns="group", values=["mean", "n"]).round(3).to_string())
 
-    figure(t, e, args.show_human)
+    figure(t, e, series)
     print(f"tables in {OUT.relative_to(cfg.ROOT)}/")
 
 

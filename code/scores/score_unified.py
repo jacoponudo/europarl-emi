@@ -1,7 +1,8 @@
 """EMI scores of the speeches of the unified dataset, saved once and read by every figure script.
 
-Speeches scored: those with an English text, delivered in English or translated with eTranslation
-(see code/translation/unified.py); --population mep-oral (default) or all.
+Speeches scored: those with an English text: delivered in English, translated by hand by the Parliament
+(to 2012) or translated with eTranslation (from 2013); see code/translation/unified.py.
+--population mep-oral (default) or all.
 Measure (emi.py, as in the paper baseline): spaces normalised, speeches with more than 10 words, chunks of
 <= 150 words (a last chunk < 50 words joins the previous one), header included, MiniLM all-MiniLM-L6-v2,
 cosine with the mean embedding of each lexicon; length correction in 10-word bins and z-score computed ONCE
@@ -13,8 +14,9 @@ on all chunks scored here; EMI = z(evidence) - z(intuition); speech EMI = mean o
 Out: data/scores/<model>_<window>_<date>/
     speech_emi.parquet   uid, emi, evidence_z, intuition_z, n_chunks, n_words (one row per speech)
     meta.json            measure, population, counts
-    chunk_scores/        raw similarities per chunk (cache: the slow part, resumes from the missing parts;
-                         if the speeches change, a new date gives a new folder)
+    chunk_scores/        raw similarities per chunk (cache: the slow part). Chunks already scored are reused,
+                         keyed by (uid, chunk_id), and only new ones are embedded; so adding speeches to a
+                         folder costs only their embeddings, and EMI is then recomputed on all chunks.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from scores.emi import compute_emi, split_into_chunks  # noqa: E402
 from translation.unified import load  # noqa: E402
 
 PART_SIZE = 20_000
+GROUPS = ["original", "human", "etranslation"]  # English texts scored (see translation/unified.py)
 
 
 def folder(day: str) -> Path:
@@ -41,7 +44,7 @@ def folder(day: str) -> Path:
 
 
 def chunk_table(u: pd.DataFrame) -> pd.DataFrame:
-    s = u[u.group.isin(["original", "etranslation"])].sort_values("uid")
+    s = u[u.group.isin(GROUPS)].sort_values("uid")
     text = s.en.fillna("").str.replace(r"\s+", " ", regex=True).str.strip()
     keep = text.str.split().str.len() > cfg.SCORE_MIN_WORDS
     rows = [(uid, i, c) for uid, t in zip(s.uid[keep], text[keep]) for i, c in enumerate(split_into_chunks(t))]
@@ -53,39 +56,48 @@ def chunk_table(u: pd.DataFrame) -> pd.DataFrame:
 
 
 def score(ch: pd.DataFrame, cache: Path) -> pd.DataFrame:
-    """Raw similarities per chunk, saved in parts; resumes from the missing parts."""
+    """Raw similarities per chunk. Chunks already in the cache (same uid, chunk_id and n_words) are reused;
+    only the others are embedded, in new parts. Resumes if interrupted."""
     cache.mkdir(parents=True, exist_ok=True)
     manifest = cache / "manifest.json"
-    sig = {"n_chunks": len(ch), "n_speeches": int(ch.uid.nunique()), "first": ch.uid.iloc[0],
-           "last": ch.uid.iloc[-1], "part_size": PART_SIZE, "model": cfg.EMBEDDING_MODEL}
-    if manifest.exists() and json.loads(manifest.read_text()) != sig:
-        raise SystemExit(f"The speeches differ from those scored in {cache}: use a new --date.")
-    manifest.write_text(json.dumps(sig))
+    if manifest.exists() and json.loads(manifest.read_text()).get("model") != cfg.EMBEDDING_MODEL:
+        raise SystemExit(f"{cache} was scored with another model: use a new --date.")
+    manifest.write_text(json.dumps({"model": cfg.EMBEDDING_MODEL, "part_size": PART_SIZE}))
 
-    n_parts = math.ceil(len(ch) / PART_SIZE)
-    todo = [p for p in range(n_parts) if not (cache / f"part-{p:04d}.parquet").exists()]
-    if todo:
+    parts = sorted(cache.glob("part-*.parquet"))
+    key = ["uid", "chunk_id"]
+    old = (pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True).drop_duplicates(key)
+           if parts else pd.DataFrame(columns=key + ["n_words", "sim_evidence", "sim_intuition"]))
+    m = ch.merge(old, on=key, how="left", suffixes=("", "_cached"))
+    bad = m.n_words_cached.notna() & m.n_words_cached.ne(m.n_words)
+    if bad.any():
+        raise SystemExit(f"{int(bad.sum()):,} cached chunks have a different length (texts changed): use a new --date.")
+    todo = ch[m.sim_evidence.isna().to_numpy()]
+    print(f"chunks: {len(ch):,}; already scored: {len(ch) - len(todo):,}; to score: {len(todo):,}")
+    if len(todo):
         from sentence_transformers import SentenceTransformer, util
         from tqdm import tqdm
 
         from scores.emi import lexicon_vectors, pick_device
 
         device = pick_device()
-        print(f"scoring {len(todo)} of {n_parts} parts on {device}")
         model = SentenceTransformer(cfg.EMBEDDING_MODEL, device=device)
         ref = lexicon_vectors(model)
-        for p in tqdm(todo, desc="parts"):
-            part = ch.iloc[p * PART_SIZE:(p + 1) * PART_SIZE].copy()
+        first = 1 + max((int(p.stem.split("-")[1]) for p in parts), default=-1)
+        n_new = math.ceil(len(todo) / PART_SIZE)
+        print(f"scoring {n_new} new parts on {device}")
+        for i in tqdm(range(n_new), desc="parts"):
+            part = todo.iloc[i * PART_SIZE:(i + 1) * PART_SIZE].copy()
             emb = model.encode(part.chunk_text.tolist(), batch_size=128, convert_to_tensor=True)
             sims = util.cos_sim(emb, ref).cpu().numpy()
             part["sim_evidence"], part["sim_intuition"] = sims[:, 0], sims[:, 1]
-            path = cache / f"part-{p:04d}.parquet"
+            path = cache / f"part-{first + i:04d}.parquet"
             part.drop(columns="chunk_text").to_parquet(path.with_suffix(".tmp"), index=False)
             path.with_suffix(".tmp").rename(path)
-    else:
-        print(f"all {n_parts} parts already scored in {cache}")
-    s = pd.concat([pd.read_parquet(cache / f"part-{p:04d}.parquet") for p in range(n_parts)], ignore_index=True)
-    assert len(s) == len(ch), f"chunks in cache {len(s):,} != expected {len(ch):,}"
+        old = pd.concat([pd.read_parquet(p) for p in sorted(cache.glob("part-*.parquet"))],
+                        ignore_index=True).drop_duplicates(key)
+    s = ch.drop(columns="chunk_text").merge(old[key + ["sim_evidence", "sim_intuition"]], on=key, how="left")
+    assert s.sim_evidence.notna().all(), "some chunks have no similarity"
     return s
 
 
@@ -111,7 +123,9 @@ def main() -> None:
         "folder": out.name, "date": args.date, "model": cfg.EMBEDDING_MODEL,
         "window_words": cfg.CHUNK_MAX_WORDS, "last_chunk_min_words": cfg.CHUNK_MIN_WORDS,
         "speech_min_words": cfg.SCORE_MIN_WORDS + 1, "header": "included",
-        "population": args.population, "texts": "delivered in English + translated with eTranslation",
+        "population": args.population,
+        "texts": "delivered in English + human translation by the Parliament (to 2012) + eTranslation (from 2013)",
+        "groups_scored": GROUPS,
         "standardisation": "length correction (10-word bins) and z-score over all chunks of this folder",
         "n_speeches": len(sp), "n_chunks": len(s), "speeches_by_group": groups,
         "sd_speech_emi": round(float(sp.emi.std()), 4),

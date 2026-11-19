@@ -83,9 +83,9 @@ One folder per methodology, named model, window (words per chunk) and date of co
 |---|---|
 | `speech_emi.parquet` | one row per speech: `uid`, `emi`, `evidence_z`, `intuition_z`, `n_chunks`, `n_words` |
 | `meta.json` | model, window, population, texts scored, standardisation, counts, SD of speech EMI |
-| `chunk_scores/` | raw similarities per chunk (`uid`, `chunk_id`, `n_words`, `sim_evidence`, `sim_intuition`) in parts of 20,000, plus `manifest.json`: the slow part, kept so that EMI can be recomputed without new embeddings |
+| `chunk_scores/` | raw similarities per chunk (`uid`, `chunk_id`, `n_words`, `sim_evidence`, `sim_intuition`) in parts, plus `manifest.json`: the slow part. Chunks already scored are reused, so adding speeches costs only their embeddings |
 
-`minilm_150_20261119` covers the MEP oral speeches with an English text, delivered in English (63,472) or translated with eTranslation (114,523): 177,995 speeches, 286,217 chunks, SD of speech EMI 0.645. Each folder is standardised on its own chunks, so values from different folders are not on the same scale.
+`minilm_150_20261119` covers the MEP oral speeches with an English text, in three groups: delivered in English, translated by hand by the Parliament (to 2012), and translated with eTranslation (from 2013). The counts are in `meta.json`. A first run on 19 November scored only the first and third groups (177,995 speeches: 63,472 delivered in English, 114,523 translated with eTranslation); the human translations (about 101,000) were then added to the same folder, and EMI was recomputed on all chunks together. Each folder is standardised on its own chunks, so values from different folders are not on the same scale.
 
 ### 1.5 `results/`
 
@@ -143,13 +143,13 @@ sh code/translation/etranslation.sh start
 sh code/translation/etranslation.sh status
 ```
 
-**`unified.py`**: `load(population="mep-oral", with_text=False)` returns `unified` with a `group` column (`original`, `etranslation`, `human`, `other`) and, with `with_text=True`, the English text of each speech in `en`. Every analysis should start from here.
+**`unified.py`**: `load(population="mep-oral", with_text=False)` returns `unified` with a `group` column (`original`, `human`, `etranslation`, `other`) and, with `with_text=True`, the English text of each speech in `en` (column `text` for `original` and `human`, the joined eTranslation segments for `etranslation`). Every analysis should start from here.
 
 ### 2.4 `code/scores/`
 
 **`emi.py`** holds the measure, unchanged from the original pipeline: `split_into_chunks`, `lexicon_vectors` (mean embedding of each lexicon), `pick_device` (mps / cuda / cpu), `compute_emi`. `compute_emi` corrects similarities for chunk length (mean per 10-word bin), takes z-scores over all chunks given, and returns EMI = z(evidence) − z(intuition).
 
-**`score_unified.py`** scores the English texts of `unified` (delivered in English or translated with eTranslation, header included) and writes `data/scores/minilm_150_<date>/`. Embeddings are saved in parts: an interrupted run resumes, and a run on an existing folder only recomputes EMI (seconds). If the speeches change, use a new `--date`.
+**`score_unified.py`** scores the English texts of `unified` (delivered in English, translated by hand by the Parliament, or translated with eTranslation; header included) and writes `data/scores/minilm_150_<date>/`. Embeddings are saved in parts and reused by `(uid, chunk_id)`: an interrupted run resumes, a run that adds speeches embeds only the new chunks, and EMI is always recomputed on all chunks. If a text changes, its chunks no longer match the cache and the script stops: use a new `--date`.
 
 ```bash
 uv run python code/scores/score_unified.py                    # folder minilm_150_<today>, ~15 min on the Mac GPU
@@ -160,9 +160,10 @@ uv run python code/scores/score_unified.py --date 20261119    # reuse that folde
 
 **`style.py`**: figure style (Nature Human Behaviour: Arial 7 pt, bold lowercase panel letters, widths 89/120/183 mm, editable PDF text) and the project palette (`PALETTE`, nine colours from Cherry Rose `#b7094c` to Pacific Cyan `#0091ad`).
 
-**`fig1.py`**: Figure 1, MEP oral speeches.
-- Panel a: speeches per year delivered in English and translated with eTranslation (`--show-human` adds the Parliament's human translations to 2012).
-- Panel b: mean EMI per year with percentile bootstrap 95% intervals (B = 2000, seed 42, resampling speeches within year) for all speeches, delivered in English, and translated.
+**`fig1.py`**: Figure 1, MEP oral speeches in three groups: delivered in English, human translation by the Parliament (to 2012), translated with eTranslation (from 2013).
+- Panel a: speeches per year in each group.
+- Panel b: mean EMI per year with percentile bootstrap 95% intervals (B = 2000, seed 42, resampling speeches within year) for each group and for all speeches together (dashed dark grey: the palette has no fourth hue that stays distinct).
+- `--without-human` leaves the human translations out of both panels and of "all speeches".
 
 ```bash
 uv run python code/results/fig1.py
@@ -195,4 +196,5 @@ git diff --cached --name-only | grep -E '^(data|results|paper|models)/' && echo 
 - **Coverage 2020 – June 2021.** The corpus is incomplete in 2020 and the first half of 2021, and the API starts only in July 2021. Figure 1 shades these years.
 - **Possible written statements among the translated oral speeches, 2015–2016.** These years have 12,695 and 14,078 translated MEP oral speeches, against about 7,500–8,800 in other years. They also coincide with the peak of written statements in English. In those years the translated speeches have a mean EMI 0.2–0.4 higher than speeches delivered in English. To check: count translated speeches whose translated header contains "in writing"; if they are many, correct the rule in `build_unified.py`.
 - **`unified` is from 2026-11-03.** API days downloaded afterwards need a new run of `build_unified.py`, then of `etranslation.py prepare/run` for the new non-English texts, and of `score_unified.py` with a new date.
-- **Small gaps.** 8 non-English texts are not fully translated; 647 speeches have 10 words or fewer and get no EMI.
+- **Two translation methods.** The translated speeches are translated by hand by the Parliament up to 2012 and by eTranslation from 2013; the originals of the human-translated speeches are not in the corpus, so the two methods cannot yet be compared on the same speeches.
+- **Small gaps.** 8 non-English texts are not fully translated; speeches of 10 words or fewer get no EMI.

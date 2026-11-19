@@ -8,8 +8,8 @@ Groups (column `group`):
   original      english_text == "text (original)"; English text = column `text`
   etranslation  detected as non-English and all eTranslation segments done (from 2013); English text =
                 the segments joined in order (header included, as in `text`)
-  human         english_text == "text (human translation)": the Parliament's translation (to 2012),
-                not used for the EMI
+  human         english_text == "text (human translation)": the Parliament's translation (to 2012);
+                English text = column `text`
   other         no English text
 """
 
@@ -59,7 +59,7 @@ def load(population: str = "mep-oral", with_text: bool = False,
     u.loc[u.uid.isin(tr.uid) & ~et.eq("text (original)"), "group"] = "etranslation"
     if with_text:
         u = u.merge(tr, on="uid", how="left")
-        u["en"] = u.text.where(u.group.eq("original"), u.text_en.where(u.group.eq("etranslation")))
+        u["en"] = u.text.where(u.group.isin(["original", "human"]), u.text_en.where(u.group.eq("etranslation")))
         u = u.drop(columns=["text", "text_en"])
     u["year"] = u.year.astype(int)
     print("groups:", u.group.value_counts().to_dict())
