@@ -37,6 +37,13 @@ SEED = 42
 # EMI measure (code/scores/)
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 MODEL_SHORT = "minilm"  # first part of the scores folder name
+# Models selectable with score_unified.py --model <short name> (sensitivity of the measure)
+MODELS = {
+    "minilm": "sentence-transformers/all-MiniLM-L6-v2",  # baseline; reads up to 256 tokens
+    "mpnet": "sentence-transformers/all-mpnet-base-v2",  # 384 tokens
+    "bge": "BAAI/bge-base-en-v1.5",                      # 512 tokens
+    "gte": "thenlper/gte-base",                          # 512 tokens
+}
 SCORE_MIN_WORDS = 10
 CHUNK_MAX_WORDS = 150
 CHUNK_MIN_WORDS = 50
