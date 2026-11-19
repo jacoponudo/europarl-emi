@@ -103,7 +103,10 @@ def score(ch: pd.DataFrame, cache: Path, max_seq_length: int | None = None,
         from scores.emi import lexicon_vectors, pick_device
 
         device = pick_device()
-        model = SentenceTransformer(cfg.EMBEDDING_MODEL, device=device)
+        import torch
+
+        # float32 everywhere: some checkpoints (gte-base) are stored in float16, slow and less precise on CPU
+        model = SentenceTransformer(cfg.EMBEDDING_MODEL, device=device, model_kwargs={"dtype": torch.float32})
         if max_seq_length:
             model.max_seq_length = max_seq_length
         info.update(truncation(model, ch))
