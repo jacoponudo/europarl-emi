@@ -10,7 +10,8 @@ Population: MEP oral speeches, in three groups by the source of their English te
 delivered in English; translated by hand by the Parliament (to 2012); translated with eTranslation (from 2013).
 Panel a  speeches per year in each group (stacked bars).
 Panel b  mean EMI per year with 95% confidence intervals from the data (mean +/- t(0.975, n-1) * sd / sqrt(n),
-         one speech = one observation), for each group and for all speeches together.
+         one speech = one observation), for each group and for all speeches together. The area of each
+         point is proportional to the number of speeches in that year and group.
 --without-human leaves the Parliament's human translations out of both panels and of "all speeches".
 
     uv run python code/scores/score_unified.py    # once: EMI scores (slow part)
@@ -40,7 +41,7 @@ from matplotlib.ticker import FuncFormatter, MultipleLocator  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # code/
 import config as cfg  # noqa: E402
-from results.style import BAND, DOUBLE, INK, MUTED, PALETTE, apply_style, mm, panel_label, save, ygrid  # noqa: E402
+from results.style import DOUBLE, INK, MUTED, PALETTE, apply_style, mm, panel_label, save, ygrid  # noqa: E402
 from translation.unified import load  # noqa: E402
 
 OUT = cfg.TABLES / "fig1"
@@ -48,8 +49,8 @@ FIG = cfg.FIGURES / "paper" / "fig1"
 
 # (key, legend label, colour)
 ORIGINAL = ("original", "Delivered in English", PALETTE["Cherry Rose"])
-ETRANSLATION = ("etranslation", "Translated with eTranslation", PALETTE["Pacific Cyan"])
-HUMAN = ("human", "Human translation (European Parliament)", PALETTE["Dusty Grape"])
+ETRANSLATION = ("etranslation", "Translated by eTranslation", PALETTE["Pacific Cyan"])
+HUMAN = ("human", "Translated by human translators", PALETTE["Dusty Grape"])
 # all speeches: a neutral dark grey, dashed. The palette is one gradient: no fourth hue stays distinct from the
 # three groups, so the aggregate takes no hue of its own.
 ALL = ("all", "All speeches", "#3d3d3d")
@@ -104,43 +105,55 @@ def emi_by_year(sp: pd.DataFrame, groups: list[str]) -> pd.DataFrame:
 
 # ---------------------------------------------------------------- figure
 
-def coverage_band(ax, label: bool) -> None:
-    # corpus incomplete from 2020 until the API takes over (July 2021)
-    ax.axvspan(2019.5, 2021.5, color=BAND, zorder=0, linewidth=0)
-    if label:
-        ax.text(2020.5, 1.01, "Incomplete coverage", transform=ax.get_xaxis_transform(),
-                ha="center", va="bottom", fontsize=5.5, color=MUTED, clip_on=False)
-
-
 def panel_a(ax, t: pd.DataFrame, series: list) -> None:
     x = t.index.to_numpy()
     bottom = 0
     for key, label, color in series:
         ax.bar(x, t[key], bottom=bottom, width=0.8, color=color, label=label, edgecolor="white", linewidth=0.4)
         bottom = bottom + t[key]
-    coverage_band(ax, label=True)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v / 1000:g}k" if v else "0"))
     ax.set_ylabel("Speeches per year")
     ygrid(ax)
     ax.legend(loc="upper left", handlelength=1.0, handleheight=0.8, borderaxespad=0.2, labelspacing=0.3)
 
 
+MAX_AREA = 60  # marker area (pt^2) of the largest year-group; area is proportional to the number of speeches
+
+
+def size_key(n_max: int) -> list[int]:
+    """Three round numbers of speeches for the size legend: the largest 1-2-5 number <= n_max, its half
+    and its tenth."""
+    exp = 10 ** int(np.floor(np.log10(n_max)))
+    top = max(m * exp for m in (1, 2, 5) if m * exp <= n_max)
+    return [int(v) for v in (top / 10, top / 2, top) if v >= 1]
+
+
 def panel_b(ax, e: pd.DataFrame, series: list) -> None:
-    coverage_band(ax, label=False)
     ax.axhline(0, color=MUTED, linewidth=0.5, linestyle=(0, (3, 2)), zorder=1)
-    # all speeches: dashed line on top
+    k = MAX_AREA / e.n.max()
+    handles = []
     for key, label, color in series + [ALL]:
         d = e[e.group.eq(key)].sort_values("year")
         dashed = key == "all"
         ax.fill_between(d.year, d.ci_low, d.ci_high, color=color, alpha=0.12 if dashed else 0.2,
                         linewidth=0, zorder=2)
-        ax.plot(d.year, d["mean"], color=color, label=label, zorder=4 if dashed else 3,
-                linewidth=0.9 if dashed else 1.0, linestyle=(0, (3, 1.5)) if dashed else "-",
-                marker=None if dashed else "o", markersize=2.6, markeredgecolor="white", markeredgewidth=0.3)
-    ax.set_ylabel("Mean EMI")
+        (line,) = ax.plot(d.year, d["mean"], color=color, zorder=4 if dashed else 3,
+                          linewidth=0.9 if dashed else 1.0, linestyle=(0, (3, 1.5)) if dashed else "-")
+        if dashed:  # all speeches: open rings, so they do not hide the groups underneath
+            ax.scatter(d.year, d["mean"], s=k * d.n, facecolor="none", edgecolor=color, linewidth=0.6, zorder=5)
+        else:
+            ax.scatter(d.year, d["mean"], s=k * d.n, color=color, edgecolor="white", linewidth=0.3, zorder=4)
+        handles.append((line, label))
+    ax.set_ylabel("Mean EMI (95% CI)")
     ax.set_xlabel("Year")
     ygrid(ax)
-    ax.legend(loc="lower left", handlelength=1.6, borderaxespad=0.2, labelspacing=0.3)
+    leg = ax.legend([h for h, _ in handles], [lab for _, lab in handles], loc="lower left",
+                    handlelength=1.6, borderaxespad=0.2, labelspacing=0.3)
+    ax.add_artist(leg)
+    vals = size_key(int(e.n.max()))
+    dots = [ax.scatter([], [], s=k * v, color=MUTED, edgecolor="white", linewidth=0.3) for v in vals]
+    ax.legend(dots, [f"{v:,}" for v in vals], title="Speeches", loc="lower left", bbox_to_anchor=(0.27, 0),
+              borderaxespad=0.2, labelspacing=0.6, handletextpad=0.6, title_fontsize=6, scatterpoints=1)
 
 
 def figure(t: pd.DataFrame, e: pd.DataFrame, series: list) -> None:

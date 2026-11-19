@@ -160,9 +160,9 @@ uv run python code/scores/score_unified.py --date 20261119    # reuse that folde
 
 **`style.py`**: figure style (Nature Human Behaviour: Arial 7 pt, bold lowercase panel letters, widths 89/120/183 mm, editable PDF text) and the project palette (`PALETTE`, nine colours from Cherry Rose `#b7094c` to Pacific Cyan `#0091ad`).
 
-**`fig1.py`**: Figure 1, MEP oral speeches in three groups: delivered in English, human translation by the Parliament (to 2012), translated with eTranslation (from 2013).
+**`fig1.py`**: Figure 1, MEP oral speeches in three groups: delivered in English, translated by human translators (the Parliament, to 2012), translated by eTranslation (from 2013).
 - Panel a: speeches per year in each group.
-- Panel b: mean EMI per year with 95% confidence intervals computed from the data, mean ± t(0.975, n−1) · sd/√n with one speech as one observation, for each group and for all speeches together (dashed dark grey: the palette has no fourth hue that stays distinct).
+- Panel b: mean EMI per year with 95% confidence intervals computed from the data, mean ± t(0.975, n−1) · sd/√n with one speech as one observation, for each group and for all speeches together (dashed dark grey with open rings: the palette has no fourth hue that stays distinct). The area of each point is proportional to the number of speeches in that year and group, with a size key in the panel.
 - `--without-human` leaves the human translations out of both panels and of "all speeches".
 
 ```bash
@@ -193,7 +193,7 @@ git diff --cached --name-only | grep -E '^(data|results|paper|models)/' && echo 
 
 ## 3. Known issues
 
-- **Coverage 2020 – June 2021.** The corpus is incomplete in 2020 and the first half of 2021, and the API starts only in July 2021. Figure 1 shades these years.
+- **Coverage 2020 – June 2021.** The corpus is incomplete in 2020 and the first half of 2021, and the API starts only in July 2021: fewer speeches in those years (smaller points in Figure 1b).
 - **Possible written statements among the translated oral speeches, 2015–2016.** These years have 12,695 and 14,078 translated MEP oral speeches, against about 7,500–8,800 in other years. They also coincide with the peak of written statements in English. In those years the translated speeches have a mean EMI 0.2–0.4 higher than speeches delivered in English. To check: count translated speeches whose translated header contains "in writing"; if they are many, correct the rule in `build_unified.py`.
 - **`unified` is from 2026-11-03.** API days downloaded afterwards need a new run of `build_unified.py`, then of `etranslation.py prepare/run` for the new non-English texts, and of `score_unified.py` with a new date.
 - **Two translation methods.** The translated speeches are translated by hand by the Parliament up to 2012 and by eTranslation from 2013; the originals of the human-translated speeches are not in the corpus, so the two methods cannot yet be compared on the same speeches.
