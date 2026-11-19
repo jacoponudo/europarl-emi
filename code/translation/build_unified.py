@@ -40,7 +40,7 @@ Regola omogenea (category)
     originale) dai metadati, con le parole "in writing" e "President" nelle lingue UE.
 
 Uso (Mac):
-    mkdir -p results/logs && uv run python -m europarl_emi.translation.build_unified 2>&1 | tee results/logs/build_unified.log
+    mkdir -p results/logs && uv run python code/translation/build_unified.py 2>&1 | tee results/logs/build_unified.log
 Esce: data/translation/unified.parquet; tabelle di riepilogo in results/tables/unified/.
 I controlli con la vecchia pipeline (06_speech_annotated.parquet) e con le coppie corpus-API
 (overlap_corpus_api.py, ora solo nella storia di git) si fanno solo se quei file esistono ancora.
@@ -50,13 +50,16 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 
-from europarl_emi import config as cfg
-from europarl_emi.translation.headers import parse_header
-from europarl_emi.config import TERM_STARTS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # code/
+import config as cfg  # noqa: E402
+from config import TERM_STARTS  # noqa: E402
+from translation.headers import parse_header  # noqa: E402
 
 RAW = cfg.CORPUS
 ANNOTATED = cfg.DATA / "processed" / "06_speech_annotated.parquet"  # facoltativo: vecchia pipeline, solo controllo

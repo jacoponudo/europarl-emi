@@ -10,7 +10,7 @@ Functions taken unchanged from the original pipeline (steps 4 and 5, in the git 
 import numpy as np
 import pandas as pd
 
-from europarl_emi import config as cfg
+import config as cfg
 
 
 def split_into_chunks(text):

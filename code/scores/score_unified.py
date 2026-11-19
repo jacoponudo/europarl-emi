@@ -1,14 +1,14 @@
 """EMI scores of the speeches of the unified dataset, saved once and read by every figure script.
 
 Speeches scored: those with an English text, delivered in English or translated with eTranslation
-(see translation/unified.py); --population mep-oral (default) or all.
+(see code/translation/unified.py); --population mep-oral (default) or all.
 Measure (emi.py, as in the paper baseline): spaces normalised, speeches with more than 10 words, chunks of
 <= 150 words (a last chunk < 50 words joins the previous one), header included, MiniLM all-MiniLM-L6-v2,
 cosine with the mean embedding of each lexicon; length correction in 10-word bins and z-score computed ONCE
 on all chunks scored here; EMI = z(evidence) - z(intuition); speech EMI = mean of its chunks.
 
-    uv run python -m europarl_emi.scores.score_unified                     # folder minilm_150_<today>
-    uv run python -m europarl_emi.scores.score_unified --date 20261119     # reuse / complete that folder
+    uv run python code/scores/score_unified.py                     # folder minilm_150_<today>
+    uv run python code/scores/score_unified.py --date 20261119     # reuse / complete that folder
 
 Out: data/scores/<model>_<window>_<date>/
     speech_emi.parquet   uid, emi, evidence_z, intuition_z, n_chunks, n_words (one row per speech)
@@ -22,14 +22,16 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 
-from europarl_emi import config as cfg
-from europarl_emi.scores.emi import compute_emi, split_into_chunks
-from europarl_emi.translation.unified import load
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # code/
+import config as cfg  # noqa: E402
+from scores.emi import compute_emi, split_into_chunks  # noqa: E402
+from translation.unified import load  # noqa: E402
 
 PART_SIZE = 20_000
 
@@ -66,7 +68,7 @@ def score(ch: pd.DataFrame, cache: Path) -> pd.DataFrame:
         from sentence_transformers import SentenceTransformer, util
         from tqdm import tqdm
 
-        from europarl_emi.scores.emi import lexicon_vectors, pick_device
+        from scores.emi import lexicon_vectors, pick_device
 
         device = pick_device()
         print(f"scoring {len(todo)} of {n_parts} parts on {device}")

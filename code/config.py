@@ -1,4 +1,4 @@
-"""Paths and parameters, in one place.
+"""Paths and parameters, in one place. The folders of code/ mirror those of data/.
 
 data/
   raw/inherited/   corpus, MEP membership and identifiers, lexicons (as received)
@@ -11,7 +11,7 @@ results/           everything else: figures, tables, logs
 from pathlib import Path
 
 # Folders
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 RAW_INHERITED = DATA / "raw" / "inherited"
 RAW_CORPUS = RAW_INHERITED / "corpus"
@@ -34,7 +34,7 @@ ETRANSLATION_DB = TRANSLATION / "etranslation.sqlite"
 # Reproducibility
 SEED = 42
 
-# EMI measure (src/europarl_emi/emi.py, score_unified.py)
+# EMI measure (code/scores/)
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 MODEL_SHORT = "minilm"  # first part of the scores folder name
 SCORE_MIN_WORDS = 10

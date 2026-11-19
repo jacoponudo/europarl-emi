@@ -1,6 +1,6 @@
 """The unified dataset with the English text of every speech: delivered in English or translated with eTranslation.
 
-    from europarl_emi.translation.unified import load
+    from translation.unified import load      # with code/ on sys.path
     u = load()                      # MEP oral speeches, metadata and group
     u = load(with_text=True)        # also column `en`, the English text
 
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from europarl_emi import config as cfg
+import config as cfg
 
 MEP_ORAL = "MEP, oral"
 

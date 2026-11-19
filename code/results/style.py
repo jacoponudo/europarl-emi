@@ -1,6 +1,6 @@
 """Shared figure style for the paper figures: Nature Human Behaviour look and the project palette.
 
-    from europarl_emi.results.style import PALETTE, C, apply_style, panel_label, mm, save
+    from results.style import PALETTE, C, apply_style, panel_label, mm, save   # with code/ on sys.path
 """
 
 from __future__ import annotations

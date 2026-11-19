@@ -4,7 +4,7 @@
 
 This repository measures whether speeches in the European Parliament rely more on the language of *evidence* (data, research, proof, facts) or of *intuition* (belief, feeling, opinion, common sense), and how this balance has changed over time. It extends to the European Parliament the approach of Aroyehun et al. (2025), who documented a shift from evidence-based to intuition-based language in US congressional speeches.
 
-The repository contains only the code that builds the current data and the paper figures: the download of speeches from the Parliament's API, the unified corpus + API dataset, the machine translation of non-English speeches with eTranslation, the EMI scores and the figure scripts. The code mirrors the data: one subpackage of `src/europarl_emi/` for each folder of `data/` (raw, translation, scores) plus one for `results/`. The earlier pipeline (steps 1–7, review and sensitivity code, legacy notebooks, corpus–API overlap check, old scores and sensitivity variants) is in the git history up to commit `ba52117`.
+The repository contains only the code that builds the current data and the paper figures: the download of speeches from the Parliament's API, the unified corpus + API dataset, the machine translation of non-English speeches with eTranslation, the EMI scores and the figure scripts. The folders of `code/` mirror those of `data/` (raw, translation, scores), plus `code/results/` for what goes to `results/`. The earlier pipeline (steps 1–7, review and sensitivity code, legacy notebooks, corpus–API overlap check, old scores and sensitivity variants) is in the git history up to commit `ba52117`.
 
 ## Data
 
@@ -27,10 +27,8 @@ Speech ids are `uid` as in `unified.parquet`: `corpus:<guid>` or `api:<speech_id
 
 ## Code
 
-Everything is in `src/europarl_emi/` and runs as a module (`uv run python -m europarl_emi.<part>.<module>`).
-
 ```
-src/europarl_emi/
+code/
   config.py                    paths and parameters
   raw/                         -> data/raw/api/
     download_speeches.py         download from https://data.europarl.europa.eu/api/v2/speeches
@@ -38,6 +36,7 @@ src/europarl_emi/
     headers.py                   parse_header: role, original language, written statement, group from the header
     build_unified.py             unified corpus + API dataset
     etranslation.py              eTranslation client: prepare, run, status, export
+    etranslation.sh              runs the translation in the background (Mac)
     unified.py                   load unified with the English text of each speech (original or eTranslation)
   scores/                      -> data/scores/
     emi.py                       EMI measure: chunks, MiniLM similarities, length correction, z-score
@@ -45,10 +44,9 @@ src/europarl_emi/
   results/                     -> results/
     style.py                     figure style (Nature Human Behaviour) and project palette
     fig1.py                      Figure 1
-scripts/
-  etranslation.sh              runs the eTranslation translation in the background (Mac)
-  reorganize_data.py           one-off move of data/ to this layout (dry run by default)
 ```
+
+Scripts are run from the project folder with `uv run python code/<folder>/<script>.py`; each puts `code/` on the Python path, so the folders import each other (`import config`, `from translation.unified import load`).
 
 ## Getting started
 
@@ -63,19 +61,19 @@ uv sync
 Data, in order:
 
 ```bash
-uv run python -m europarl_emi.raw.download_speeches
-uv run python -m europarl_emi.translation.build_unified
-uv run --with lingua-language-detector --with tqdm python -m europarl_emi.translation.etranslation prepare \
+uv run python code/raw/download_speeches.py
+uv run python code/translation/build_unified.py
+uv run --with lingua-language-detector --with tqdm python code/translation/etranslation.py prepare \
     --input data/translation/unified.parquet --id-col uid --text-col text --lang-col original_language \
     --date-col date --from-year 2013
-sh scripts/etranslation.sh start
-uv run python -m europarl_emi.scores.score_unified    # EMI scores, ~15 min on an Apple-silicon GPU
+sh code/translation/etranslation.sh start
+uv run python code/scores/score_unified.py      # EMI scores, ~15 min on an Apple-silicon GPU
 ```
 
 Figures:
 
 ```bash
-uv run python -m europarl_emi.results.fig1            # -> results/figures/paper/fig1.pdf / .png
+uv run python code/results/fig1.py              # -> results/figures/paper/fig1.pdf / .png
 ```
 
 ## Measure

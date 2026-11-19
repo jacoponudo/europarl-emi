@@ -2,12 +2,12 @@
 # Traduzione eTranslation del dataset unified, in sottofondo (si può chiudere il terminale).
 # Si lancia dalla cartella del progetto, con sh o zsh:
 #
-#   sh scripts/etranslation.sh start     verifica le credenziali e avvia tunnel + traduzione
-#   sh scripts/etranslation.sh restart   ferma tutto e riavvia (riprende da dove era arrivato)
-#   sh scripts/etranslation.sh status    avanzamento, ultima traduzione arrivata, stima del tempo
-#   sh scripts/etranslation.sh log       ultime righe del log, dal vivo (Ctrl+C esce, il lavoro continua)
-#   sh scripts/etranslation.sh stop      ferma tutto
-#   sh scripts/etranslation.sh forget    cancella la password salvata nel Portachiavi
+#   sh code/translation/etranslation.sh start     verifica le credenziali e avvia tunnel + traduzione
+#   sh code/translation/etranslation.sh restart   ferma tutto e riavvia (riprende da dove era arrivato)
+#   sh code/translation/etranslation.sh status    avanzamento, ultima traduzione arrivata, stima del tempo
+#   sh code/translation/etranslation.sh log       ultime righe del log, dal vivo (Ctrl+C esce, il lavoro continua)
+#   sh code/translation/etranslation.sh stop      ferma tutto
+#   sh code/translation/etranslation.sh forget    cancella la password salvata nel Portachiavi
 #
 # Se il tunnel cade, o eTranslation smette di rispondere, il lanciatore riapre il tunnel
 # (nuovo indirizzo) e riparte da solo. Si ferma solo a lavoro finito, con stop, o se la
@@ -17,11 +17,11 @@
 if [ -z "$ZSH_VERSION" ]; then exec zsh "$0" "$@"; fi
 
 SELF="${0:A}"                     # percorso di questo file (dentro le funzioni $0 è il nome della funzione)
-cd "${SELF:h}/.." || exit 1         # cartella del progetto (questo file sta in scripts/)
+cd "${SELF:h}/../.." || exit 1      # cartella del progetto (questo file sta in code/translation/)
 PORT=8765
 LOGDIR=results/logs/etranslation
 ENDPOINT=https://language-tools.ec.europa.eu/etranslation/api/askTranslate
-MOD=europarl_emi.translation.etranslation
+MOD=code/translation/etranslation.py
 KC=etranslation                     # nome della voce nel Portachiavi
 SPEED=(--pause 0.1 --max-inflight 50)
 mkdir -p $LOGDIR
@@ -86,13 +86,13 @@ loop() {
     echo "$(ts) tunnel aperto: $URL"
     sleep 15                                   # il nuovo indirizzo impiega qualche secondo a essere visibile
     extra=(); (( first )) && extra=(--retry-errors); first=0
-    uv run --with requests --with truststore --with tqdm python -m $MOD run \
+    uv run --with requests --with truststore --with tqdm python $MOD run \
       --public-url $URL --requeue-sent $SPEED $extra >> $LOGDIR/run.log 2>&1
     RC=$?
     kill $TPID 2>/dev/null
     case $RC in
       0)   echo "$(ts) TRADUZIONE COMPLETATA"; break ;;
-      2)   echo "$(ts) CREDENZIALI RIFIUTATE: mi fermo. Rilancia con: sh scripts/etranslation.sh start"; break ;;
+      2)   echo "$(ts) CREDENZIALI RIFIUTATE: mi fermo. Rilancia con: sh code/translation/etranslation.sh start"; break ;;
       130|143) echo "$(ts) fermato"; break ;;
       3)   echo "$(ts) tunnel caduto o eTranslation non risponde: riapro il tunnel tra 30 s"; sleep 30 ;;
       *)   echo "$(ts) uscito con codice $RC, riparto tra 60 s"; sleep 60 ;;
@@ -101,7 +101,7 @@ loop() {
 }
 
 do_start() {
-  if running; then echo "È già in corso. Per riavviarlo: sh scripts/etranslation.sh restart"; exit 0; fi
+  if running; then echo "È già in corso. Per riavviarlo: sh code/translation/etranslation.sh restart"; exit 0; fi
   command -v cloudflared >/dev/null || { echo "Manca cloudflared: brew install cloudflared"; exit 1; }
   command -v uv >/dev/null || { echo "Manca uv nel PATH di questo terminale"; exit 1; }
   FROM_KC=0
@@ -112,7 +112,7 @@ do_start() {
     200) echo "Credenziali accettate." ;;
     401)
       echo "Credenziali RIFIUTATE (HTTP 401) per l'application name [$ETR_USER], password di ${#ETR_PASS} caratteri."
-      (( FROM_KC )) && echo "La password salvata non vale più: cancellala con  sh scripts/etranslation.sh forget  e rilancia start."
+      (( FROM_KC )) && echo "La password salvata non vale più: cancellala con  sh code/translation/etranslation.sh forget  e rilancia start."
       exit 1 ;;
     000) echo "eTranslation non raggiungibile: controlla la connessione e riprova."; exit 1 ;;
     *)   echo "Risposta inattesa di eTranslation (HTTP $CODE): parto lo stesso, lo script gestisce gli errori." ;;
@@ -143,7 +143,7 @@ do_start() {
   tail -1 $LOGDIR/supervisor.log
   echo "\nAvviato in sottofondo: puoi chiudere il terminale."
   echo "Il Mac deve restare acceso, alla corrente e con lo schermo aperto."
-  echo "Avanzamento: sh scripts/etranslation.sh status"
+  echo "Avanzamento: sh code/translation/etranslation.sh status"
 }
 
 case "${1:-}" in
@@ -153,13 +153,13 @@ case "${1:-}" in
   stop)
     stop_all
     echo "$(ts) fermato a mano" >> $LOGDIR/supervisor.log
-    echo "Fermato. Le traduzioni arrivate sono salvate; si riprende con: sh scripts/etranslation.sh start" ;;
+    echo "Fermato. Le traduzioni arrivate sono salvate; si riprende con: sh code/translation/etranslation.sh start" ;;
   status)
-    if running; then echo "STATO: in corso"; else echo "STATO: FERMO (riavvia con: sh scripts/etranslation.sh start)"; fi
+    if running; then echo "STATO: in corso"; else echo "STATO: FERMO (riavvia con: sh code/translation/etranslation.sh start)"; fi
     echo "--- ultimi eventi:"; tail -4 $LOGDIR/supervisor.log 2>/dev/null
     echo "--- ultime righe del programma:"
     tail -c 4000 $LOGDIR/run.log 2>/dev/null | tr '\r' '\n' | grep -v '^ *$' | tail -4
-    uv run python -m $MOD status | sed -n '/Segmenti per stato/,/^$/p;/Prima traduzione/,$p' ;;
+    uv run python $MOD status | sed -n '/Segmenti per stato/,/^$/p;/Prima traduzione/,$p' ;;
   log)
     tail -n 30 -f $LOGDIR/supervisor.log $LOGDIR/run.log ;;
   forget)
