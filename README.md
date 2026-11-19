@@ -6,6 +6,8 @@ This repository measures whether speeches in the European Parliament rely more o
 
 The repository contains only the code that builds the current data and the paper figures: the download of speeches from the Parliament's API, the unified corpus + API dataset, the machine translation of non-English speeches with eTranslation, the EMI scores and the figure scripts. The folders of `code/` mirror those of `data/` (raw, translation, scores), plus `code/results/` for what goes to `results/`. The earlier pipeline (steps 1–7, review and sensitivity code, legacy notebooks, corpus–API overlap check, old scores and sensitivity variants) is in the git history up to commit `ba52117`.
 
+See **[GUIDE.md](GUIDE.md)** for a detailed description of every data file (columns, tables, counts) and of every script.
+
 ## Data
 
 Data files are **not included** in this repository (only the lexicons).
