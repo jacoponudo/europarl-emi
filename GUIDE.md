@@ -92,7 +92,7 @@ One folder per methodology, named model, window (words per chunk) and date of co
 | Path | Content |
 |---|---|
 | `figures/paper/fig1.pdf`, `.png` | Figure 1 |
-| `tables/fig1/` | `by_year.csv` (panel a), `emi_by_year.csv` (panel b: mean, bootstrap interval, n per year and group) |
+| `tables/fig1/` | `by_year.csv` (panel a), `emi_by_year.csv` (panel b: n, mean, sd, se and 95% interval per year and group) |
 | `tables/unified/` | summaries written by `build_unified.py` |
 | `logs/` | `build.log`, `etranslation/` (run, supervisor, tunnel, callbacks), `sensitivity/` (logs of the old variants) |
 | `review/etranslation/` | earlier check of the EMI of translated speeches on the old paper scale (old code, history) |
@@ -162,7 +162,7 @@ uv run python code/scores/score_unified.py --date 20261119    # reuse that folde
 
 **`fig1.py`**: Figure 1, MEP oral speeches in three groups: delivered in English, human translation by the Parliament (to 2012), translated with eTranslation (from 2013).
 - Panel a: speeches per year in each group.
-- Panel b: mean EMI per year with percentile bootstrap 95% intervals (B = 2000, seed 42, resampling speeches within year) for each group and for all speeches together (dashed dark grey: the palette has no fourth hue that stays distinct).
+- Panel b: mean EMI per year with 95% confidence intervals computed from the data, mean ± t(0.975, n−1) · sd/√n with one speech as one observation, for each group and for all speeches together (dashed dark grey: the palette has no fourth hue that stays distinct).
 - `--without-human` leaves the human translations out of both panels and of "all speeches".
 
 ```bash

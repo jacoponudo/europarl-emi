@@ -9,8 +9,8 @@ English version (the Parliament's human translation), so there is no original-la
 Population: MEP oral speeches, in three groups by the source of their English text (translation/unified.py):
 delivered in English; translated by hand by the Parliament (to 2012); translated with eTranslation (from 2013).
 Panel a  speeches per year in each group (stacked bars).
-Panel b  mean EMI per year, with percentile bootstrap 95% intervals (resampling speeches within year,
-         B = 2000, seed 42), for each group and for all speeches together.
+Panel b  mean EMI per year with 95% confidence intervals from the data (mean +/- t(0.975, n-1) * sd / sqrt(n),
+         one speech = one observation), for each group and for all speeches together.
 --without-human leaves the Parliament's human translations out of both panels and of "all speeches".
 
     uv run python code/scores/score_unified.py    # once: EMI scores (slow part)
@@ -20,7 +20,7 @@ Panel b  mean EMI per year, with percentile bootstrap 95% intervals (resampling 
 Out:
   results/figures/paper/fig1.pdf / .png
   results/tables/fig1/by_year.csv       panel a: speeches per year in each group
-  results/tables/fig1/emi_by_year.csv   panel b: mean EMI, bootstrap interval and n per year and group
+  results/tables/fig1/emi_by_year.csv   panel b: n, mean, sd, se and 95% interval per year and group
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from scipy import stats  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MultipleLocator  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # code/
@@ -44,7 +45,6 @@ from translation.unified import load  # noqa: E402
 
 OUT = cfg.TABLES / "fig1"
 FIG = cfg.FIGURES / "paper" / "fig1"
-B = 2000
 
 # (key, legend label, colour)
 ORIGINAL = ("original", "Delivered in English", PALETTE["Cherry Rose"])
@@ -85,25 +85,21 @@ def speech_emi(u: pd.DataFrame, scores: Path, groups: list[str]) -> pd.DataFrame
     return sp
 
 
-def boot_mean(x: np.ndarray, rng: np.random.Generator, b: int = B) -> tuple[float, float]:
-    means = np.empty(b)
-    step = max(1, 2_000_000 // max(len(x), 1))  # resamples per batch, to keep memory low
-    for i in range(0, b, step):
-        k = min(step, b - i)
-        means[i:i + k] = x[rng.integers(0, len(x), size=(k, len(x)))].mean(axis=1)
-    lo, hi = np.percentile(means, [2.5, 97.5])
-    return float(lo), float(hi)
-
-
-def emi_by_year(sp: pd.DataFrame, b: int, groups: list[str]) -> pd.DataFrame:
-    rng = np.random.default_rng(cfg.SEED)
+def emi_by_year(sp: pd.DataFrame, groups: list[str]) -> pd.DataFrame:
+    """Mean EMI per year and group with its 95% confidence interval from the data:
+    mean +/- t(0.975, n-1) * sd / sqrt(n), sd with n-1 degrees of freedom."""
     rows = []
     for key, sel in [("all", sp)] + [(g, sp[sp.group.eq(g)]) for g in groups]:
         for year, x in sel.groupby("year").emi:
-            x = x.to_numpy()
-            lo, hi = boot_mean(x, rng, b) if len(x) > 1 else (np.nan, np.nan)
-            rows.append((key, int(year), len(x), x.mean(), lo, hi))
-    return pd.DataFrame(rows, columns=["group", "year", "n", "mean", "ci_low", "ci_high"])
+            n, mean = len(x), x.mean()
+            if n > 1:
+                sd = x.std(ddof=1)
+                se = sd / np.sqrt(n)
+                half = stats.t.ppf(0.975, n - 1) * se
+            else:
+                sd = se = half = np.nan
+            rows.append((key, int(year), n, mean, sd, se, mean - half, mean + half))
+    return pd.DataFrame(rows, columns=["group", "year", "n", "mean", "sd", "se", "ci_low", "ci_high"])
 
 
 # ---------------------------------------------------------------- figure
@@ -169,7 +165,6 @@ def main() -> None:
     ap.add_argument("--scores", help="folder in data/scores (default: the latest minilm_150_*)")
     ap.add_argument("--without-human", action="store_true",
                     help="leave out the Parliament's human translations (to 2012)")
-    ap.add_argument("--bootstrap", type=int, default=B, help=f"bootstrap resamples (default {B})")
     args = ap.parse_args()
     pd.set_option("display.width", 200)
 
@@ -183,10 +178,12 @@ def main() -> None:
     series = [ORIGINAL, ETRANSLATION] if args.without_human else [ORIGINAL, HUMAN, ETRANSLATION]
     groups = [k for k, _, _ in series]
     sp = speech_emi(u, cfg.SCORES / args.scores if args.scores else latest_scores(), groups)
-    e = emi_by_year(sp, args.bootstrap, groups)
+    e = emi_by_year(sp, groups)
     e.to_csv(OUT / "emi_by_year.csv", index=False)
-    print(f"\nPanel b, mean EMI per year (percentile bootstrap 95%, B = {args.bootstrap}):")
+    print("\nPanel b, mean EMI per year (95% interval: mean +/- t * sd / sqrt(n)):")
     print(e.pivot(index="year", columns="group", values=["mean", "n"]).round(3).to_string())
+    print("\nhalf-width of the 95% interval (t * se):")
+    print(e.assign(half=(e.ci_high - e.ci_low) / 2).pivot(index="year", columns="group", values="half").round(3).to_string())
 
     figure(t, e, series)
     print(f"tables in {OUT.relative_to(cfg.ROOT)}/")

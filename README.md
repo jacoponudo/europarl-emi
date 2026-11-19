@@ -84,7 +84,7 @@ Each speech is split into chunks of up to 150 words, embedded with the sentence-
 
 ## Figures
 
-**Figure 1.** (a) MEP oral speeches per year: delivered in English, translated by hand by the Parliament (to 2012), translated with eTranslation (from 2013). (b) Mean EMI per year with percentile bootstrap 95% intervals (B = 2000), for each group and for all speeches.
+**Figure 1.** (a) MEP oral speeches per year: delivered in English, translated by hand by the Parliament (to 2012), translated with eTranslation (from 2013). (b) Mean EMI per year with 95% confidence intervals from the data (mean ± t · sd/√n), for each group and for all speeches.
 
 ## References
 
