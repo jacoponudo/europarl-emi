@@ -1,4 +1,4 @@
-"""Shared figure style for the paper figures: Nature Human Behaviour look and the project palette.
+"""Shared figure style for the paper figures: Nature Human Behaviour look, ECL orange palette, PDF output.
 
     from results.style import PALETTE, C, apply_style, panel_label, mm, save   # with code/ on sys.path
 """
@@ -9,19 +9,41 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-# Project palette, in order (warm to cool)
+# Project palette: the "orange" colour mode of the Europa Component Library (ECL v5, CSS class
+# ecl-color-mode--orange, @ecl/preset-ec). Names are the ECL custom properties.
 PALETTE = {
-    "Cherry Rose": "#b7094c",
-    "Dark Raspberry": "#a01a58",
-    "Royal Plum": "#892b64",
-    "Velvet Purple": "#723c70",
-    "Dusty Grape": "#5c4d7d",
-    "Dusk Blue": "#455e89",
-    "Rich Cerulean": "#2e6f95",
-    "Cerulean": "#1780a1",
-    "Pacific Cyan": "#0091ad",
+    "orange": "#e87e1d",        # --cm-border-high
+    "orange-light": "#ff8a20",  # --cm-on-surface-1 / --cm-border
+    "brown": "#8c4c12",         # --cm-on-surface
+    "teal-dark": "#0a3f4d",     # --cm-surface-variant-1
+    "teal": "#69d2c6",          # --cm-on-surface-2
+    "surface": "#ffa14d",       # --cm-surface-0
+    "surface-medium": "#ffc998",  # --cm-surface-medium-0 / --cm-border-low
+    "surface-low": "#ffdbba",   # --cm-surface-low-0
+    "surface-lowest": "#fff3e9",  # --cm-surface-lowest (before the 50% mix)
 }
-C = list(PALETTE.values())
+# Categorical order for series (fixed, never cycled): orange, brown, dark teal, teal.
+# Checked with the dataviz validator: adjacent pairs distinct also for colour-blind readers (worst dE 14 protan).
+# Teal (#69d2c6) and orange have low contrast on white (1.8:1, 2.8:1): every series also has a legend entry,
+# and the numbers are written to results/tables/.
+C = [PALETTE["orange"], PALETTE["brown"], PALETTE["teal-dark"], PALETTE["teal"]]
+
+# Groups of speeches (column `group` of translation.unified.load): (key, legend label, colour).
+# The same group keeps the same colour in every figure.
+ORIGINAL = ("original", "Delivered in English", PALETTE["orange"])
+HUMAN = ("human", "Translated by human translators", PALETTE["brown"])
+ETRANSLATION = ("etranslation", "Translated by eTranslation", PALETTE["teal-dark"])
+ALL = ("all", "All speeches", PALETTE["teal"])  # aggregate: dashed, open rings
+
+
+# The two components of EMI (evidence_z, intuition_z), when drawn without groups: (key, legend label, colour)
+EVIDENCE = ("evidence_z", "Evidence", PALETTE["teal-dark"])
+INTUITION = ("intuition_z", "Intuition", PALETTE["orange"])
+
+
+def series(without_human: bool = False) -> list[tuple[str, str, str]]:
+    """The groups drawn, in order; --without-human leaves out the Parliament's human translations (to 2012)."""
+    return [ORIGINAL, ETRANSLATION] if without_human else [ORIGINAL, HUMAN, ETRANSLATION]
 
 INK = "#1a1a1a"      # text
 MUTED = "#555555"    # axes, ticks
@@ -65,7 +87,9 @@ def ygrid(ax) -> None:
 
 
 def save(fig, path: Path) -> None:
+    """One PDF per figure (vector, editable text): results/figures/paper/<name>.pdf."""
+    path = path.with_suffix(".pdf")
     path.parent.mkdir(parents=True, exist_ok=True)
-    for ext in (".pdf", ".png"):
-        fig.savefig(path.with_suffix(ext), bbox_inches="tight", dpi=600)
-    print(f"figure: {path.with_suffix('.pdf')} / .png")
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    print(f"figure: {path}")
